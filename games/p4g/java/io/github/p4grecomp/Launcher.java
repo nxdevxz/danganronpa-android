@@ -430,16 +430,6 @@ public class Launcher extends Activity {
                     refresh();
                 });
 
-        addRow(launcherSettings, t("Restaurar idioma e orientação", "Reset language and orientation"),
-                t("Restaurar", "Reset"), v -> new AlertDialog.Builder(this)
-                        .setMessage(t("Usar o idioma do sistema e orientação vertical?", "Use the system language and portrait orientation?"))
-                        .setNegativeButton(t("Cancelar", "Cancel"), null)
-                        .setPositiveButton(t("Restaurar", "Reset"), (dialog, which) -> {
-                            getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
-                            Lang.load(this);
-                            applyLauncherOrientation();
-                            refresh();
-                        }).show());
         addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
                 getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false)
                         ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
@@ -447,6 +437,17 @@ public class Launcher extends Activity {
                     settings.edit().putBoolean("landscape", !settings.getBoolean("landscape", false)).apply();
                     applyLauncherOrientation();
                 });
+        addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
+                t("Redefinir", "Reset"), v -> new AlertDialog.Builder(this)
+                        .setMessage(t("Redefinir o idioma e a orientação do launcher?",
+                                "Reset the launcher language and orientation?"))
+                        .setNegativeButton(t("Cancelar", "Cancel"), null)
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
+                            getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
+                            Lang.load(this);
+                            applyLauncherOrientation();
+                            refresh();
+                        }).show());
 
         if (!ready) {
         P4gTheme.section(root, t("Preparação do jogo", "Game setup"));
@@ -581,11 +582,6 @@ public class Launcher extends Activity {
             (group.equals("quick") ? quick : group.equals("logs") ? diagnostics :
                     group.equals("overlay") ? overlay : group.equals("controls") ? controls : graphics).addView(row);
         }
-        addResetRow(quick, "quick");
-        addResetRow(graphics, "graphics");
-        addResetRow(controls, "controls");
-        addResetRow(overlay, "overlay");
-        addResetRow(diagnostics, "logs");
         addDriverRow(graphics);
         addLogsRow(diagnostics);
 
@@ -616,6 +612,13 @@ public class Launcher extends Activity {
             }
         });
         controls.addView(edit);
+
+        // Keep the reset action as the final item in every settings section.
+        addResetRow(quick, "quick");
+        addResetRow(graphics, "graphics");
+        addResetRow(controls, "controls");
+        addResetRow(overlay, "overlay");
+        addResetRow(diagnostics, "logs");
 
         // Saves: in from a ZIP or a folder (a Switch backup or another player's), out to a ZIP in Download.
         LinearLayout saves = new LinearLayout(this);
@@ -709,11 +712,12 @@ public class Launcher extends Activity {
     }
 
     private void addResetRow(LinearLayout parent, String group) {
-        addRow(parent, t("Opções desta seção", "Options in this section"), t("Restaurar", "Reset"),
+        addRow(parent, t("Redefinir configurações", "Reset settings"), t("Redefinir", "Reset"),
                 v -> new AlertDialog.Builder(this)
-                        .setMessage(t("Restaurar as opções desta seção ao padrão?", "Reset this section's options to defaults?"))
+                        .setMessage(t("Redefinir as configurações desta seção para o padrão?",
+                                "Reset this section's settings to defaults?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
-                        .setPositiveButton(t("Restaurar", "Reset"), (dialog, which) -> {
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
                             for (Option o : options) if (optionGroup(o.key).equals(group)) o.pick = o.defaultPick;
                             save();
                             updateButtons(getWindow().getDecorView());
