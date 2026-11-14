@@ -16,6 +16,7 @@ public final class LauncherSettingsTest {
         check(Launcher.optionGroup("NX_TOUCH_OPACITY").equals("controls"));
         check(Launcher.optionGroup("NX_TOUCH_SHOW").equals("quick"));
         check(Launcher.optionGroup("NX_TRACE_PERF").equals("logs"));
+        check(Launcher.DEFAULT_LANDSCAPE);
         System.out.println("Launcher settings tests passed");
     }
     private static void check(boolean value) { if (!value) throw new AssertionError(); }

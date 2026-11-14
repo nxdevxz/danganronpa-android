@@ -48,6 +48,7 @@ import java.util.Map;
 /** Routes to preparation or the main menu after checking the actual files. */
 public class Launcher extends Activity {
     static final String DATA = "Persona 4 Golden";
+    static final boolean DEFAULT_LANDSCAPE = true;
 
     static final class Option {
         final String key, pt, en;
@@ -340,7 +341,8 @@ public class Launcher extends Activity {
 
     boolean readyForPlay;
     void applyLauncherOrientation() {
-        boolean landscape = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false);
+        boolean landscape = getSharedPreferences("launcher", MODE_PRIVATE)
+                .getBoolean("landscape", DEFAULT_LANDSCAPE);
         setRequestedOrientation(landscape ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
     }
@@ -359,24 +361,26 @@ public class Launcher extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
         background.setColor(P4gTheme.PANEL);
-        background.setCornerRadius(dp(18));
+        background.setCornerRadius(dp(14));
         card.setBackground(background);
         LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
-        spacing.bottomMargin = dp(12);
+        spacing.bottomMargin = dp(8);
         root.addView(card, spacing);
         Button header = new Button(this);
         P4gTheme.button(header, false);
+        compactButton(header);
         header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        header.setTextSize(16);
+        header.setTextSize(15);
         card.addView(header, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(12), dp(8), dp(12), dp(12));
+        body.setPadding(dp(10), dp(4), dp(10), dp(8));
         TextView hint = new TextView(this);
         hint.setText(subtitle);
         hint.setTextColor(P4gTheme.MUTED);
-        hint.setTextSize(13);
-        hint.setPadding(0, 0, 0, dp(8));
+        hint.setTextSize(12);
+        hint.setPadding(0, 0, 0, dp(4));
+        hint.setVisibility(subtitle.isEmpty() ? View.GONE : View.VISIBLE);
         body.addView(hint);
         card.addView(body, new LinearLayout.LayoutParams(-1, -2));
         // Preserve expansion across refreshes and Activity recreation during this visit.
@@ -397,28 +401,27 @@ public class Launcher extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(P4gTheme.BACKGROUND);
-        int pad = dp(20);
-        root.setPadding(pad, pad, pad, pad);
+        root.setPadding(dp(18), dp(10), dp(18), dp(14));
 
         TextView title = new TextView(this);
         title.setText("Persona 4 Golden");
         title.setTextColor(P4gTheme.YELLOW);
-        title.setPadding(0, dp(20), 0, dp(4));
-        title.setTextSize(28);
+        title.setPadding(0, dp(4), 0, dp(2));
+        title.setTextSize(25);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView version = new TextView(this);
         version.setText("BETA  ·  0.5.0");
         version.setTextColor(P4gTheme.MUTED);
-        version.setTextSize(13);
+        version.setTextSize(12);
         version.setTypeface(Typeface.DEFAULT_BOLD);
-        version.setPadding(0, dp(10), 0, 0);
+        version.setPadding(0, dp(3), 0, 0);
         root.addView(version);
 
         status = new TextView(this);
         status.setTextColor(P4gTheme.MUTED);
-        status.setTextSize(14);
-        status.setPadding(0, dp(6), 0, dp(14));
+        status.setTextSize(13);
+        status.setPadding(0, dp(4), 0, dp(8));
         root.addView(status);
 
         LinearLayout launcherSettings = settingsGroup(root, "launcher", t("Configurações do launcher", "Launcher settings"),
@@ -427,10 +430,11 @@ public class Launcher extends Activity {
                 Lang.currentName(), v -> showLanguagePicker());
 
         addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
-                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false)
+                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", DEFAULT_LANDSCAPE)
                         ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
                     SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
-                    settings.edit().putBoolean("landscape", !settings.getBoolean("landscape", false)).apply();
+                    settings.edit().putBoolean("landscape",
+                            !settings.getBoolean("landscape", DEFAULT_LANDSCAPE)).apply();
                     applyLauncherOrientation();
                 });
         addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
@@ -469,8 +473,8 @@ public class Launcher extends Activity {
         P4gTheme.button(play, true);
         play.setAllCaps(false);
         play.setText(t("Preparar jogo", "Prepare"));
-        play.setTextSize(20);
-        root.addView(play, new LinearLayout.LayoutParams(-1, dp(64)));
+        play.setTextSize(18);
+        root.addView(play, new LinearLayout.LayoutParams(-1, dp(54)));
         play.setOnClickListener(v -> {
             if (!hasAccess()) askAccess();
             else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
@@ -486,11 +490,13 @@ public class Launcher extends Activity {
         }
 
         play = new Button(this);
-        play.setTextSize(20);
+        play.setTextSize(18);
         P4gTheme.button(play, true);
         play.setText(t("Jogar", "Play"));
-        LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(64));
-        playLayout.bottomMargin = dp(14);
+        LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(54));
+        playLayout.leftMargin = dp(18);
+        playLayout.rightMargin = dp(18);
+        playLayout.bottomMargin = dp(10);
         play.setOnClickListener(v -> installShadersAndPlay());
 
         LinearLayout quick = settingsGroup(root, "quick", t("Ajustes rápidos", "Quick settings"),
@@ -554,17 +560,18 @@ public class Launcher extends Activity {
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(4), 0, dp(4));
+            row.setPadding(0, dp(2), 0, dp(2));
             TextView name = new TextView(this);
             name.setText(t(o.pt, o.en));
             name.setTextColor(Color.WHITE);
-            name.setTextSize(17);
+            name.setTextSize(16);
             row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
             final Button value = new Button(this);
             P4gTheme.button(value, false);
+            compactButton(value);
             value.setAllCaps(false);
-            value.setMinWidth(dp(120));
-            value.setMaxWidth(dp(170));
+            value.setMinWidth(dp(110));
+            value.setMaxWidth(dp(160));
             row.addView(value);
             value.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -585,16 +592,17 @@ public class Launcher extends Activity {
         LinearLayout edit = new LinearLayout(this);
         edit.setOrientation(LinearLayout.HORIZONTAL);
         edit.setGravity(Gravity.CENTER_VERTICAL);
-        edit.setPadding(0, dp(4), 0, dp(4));
+        edit.setPadding(0, dp(2), 0, dp(2));
         TextView editName = new TextView(this);
         editName.setText(t("Posição dos controles", "Controls position"));
         editName.setTextColor(Color.WHITE);
-        editName.setTextSize(17);
+        editName.setTextSize(16);
         edit.addView(editName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button editButton = new Button(this);
         P4gTheme.button(editButton, false);
+        compactButton(editButton);
         editButton.setAllCaps(false);
-        editButton.setMinWidth(dp(120));
+        editButton.setMinWidth(dp(110));
         editButton.setText(t("Editar layout", "Edit layout"));
         edit.addView(editButton);
         editButton.setOnClickListener(new View.OnClickListener() {
@@ -621,20 +629,22 @@ public class Launcher extends Activity {
         LinearLayout saves = new LinearLayout(this);
         saves.setOrientation(LinearLayout.HORIZONTAL);
         saves.setGravity(Gravity.CENTER_VERTICAL);
-        saves.setPadding(0, dp(4), 0, dp(4));
+        saves.setPadding(0, dp(2), 0, dp(2));
         TextView savesName = new TextView(this);
         savesName.setText(t("Saves", "Saves"));
         savesName.setTextColor(Color.WHITE);
-        savesName.setTextSize(17);
+        savesName.setTextSize(16);
         saves.addView(savesName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button importButton = new Button(this);
         P4gTheme.button(importButton, false);
+        compactButton(importButton);
         importButton.setAllCaps(false);
         importButton.setMinWidth(dp(88));
         importButton.setText(t("Importar", "Import"));
         saves.addView(importButton);
         Button exportButton = new Button(this);
         P4gTheme.button(exportButton, false);
+        compactButton(exportButton);
         exportButton.setAllCaps(false);
         exportButton.setMinWidth(dp(88));
         exportButton.setText(t("Exportar", "Export"));
@@ -665,16 +675,17 @@ public class Launcher extends Activity {
         LinearLayout transRow = new LinearLayout(this);
         transRow.setOrientation(LinearLayout.HORIZONTAL);
         transRow.setGravity(Gravity.CENTER_VERTICAL);
-        transRow.setPadding(0, dp(4), 0, dp(4));
+        transRow.setPadding(0, dp(2), 0, dp(2));
         TextView transName = new TextView(this);
         transName.setText(t("Tradução / Mod CPK", "Translation / CPK mod"));
         transName.setTextColor(Color.WHITE);
-        transName.setTextSize(17);
+        transName.setTextSize(16);
         transRow.addView(transName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button transButton = new Button(this);
         P4gTheme.button(transButton, false);
+        compactButton(transButton);
         transButton.setAllCaps(false);
-        transButton.setMinWidth(dp(120));
+        transButton.setMinWidth(dp(110));
         transButton.setText(t("Importar CPK", "Import CPK"));
         transRow.addView(transButton);
         transButton.setOnClickListener(new View.OnClickListener() {
@@ -690,12 +701,16 @@ public class Launcher extends Activity {
         content.addView(transRow);
         addModsRow(content);
 
-        root.addView(play, playLayout);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(P4gTheme.BACKGROUND);
         scroll.setFillViewport(true);
         scroll.addView(root);
-        setContentView(scroll);
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(P4gTheme.BACKGROUND);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        screen.addView(play, playLayout);
+        setContentView(screen);
     }
 
     boolean installingShaders;
@@ -1238,20 +1253,28 @@ public class Launcher extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(4));
+        row.setPadding(0, dp(2), 0, dp(2));
         TextView name = new TextView(this);
         name.setText(label);
         name.setTextColor(Color.WHITE);
-        name.setTextSize(17);
+        name.setTextSize(16);
         row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button b = new Button(this);
         P4gTheme.button(b, false);
+        compactButton(b);
         b.setAllCaps(false);
-        b.setMinWidth(dp(120));
-        b.setMaxWidth(dp(170));
+        b.setMinWidth(dp(110));
+        b.setMaxWidth(dp(160));
         b.setText(button);
         b.setOnClickListener(click);
         row.addView(b);
         root.addView(row);
+    }
+
+    private void compactButton(Button button) {
+        button.setTextSize(13);
+        button.setMinHeight(dp(42));
+        button.setMinimumHeight(dp(42));
+        button.setPadding(dp(12), dp(6), dp(12), dp(6));
     }
 }

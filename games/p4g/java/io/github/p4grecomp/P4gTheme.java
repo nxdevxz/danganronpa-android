@@ -52,10 +52,10 @@ final class P4gTheme {
         TextView heading = new TextView(root.getContext());
         heading.setText(text);
         heading.setTextColor(MUTED);
-        heading.setTextSize(13);
+        heading.setTextSize(12);
         heading.setTypeface(Typeface.DEFAULT_BOLD);
         heading.setLetterSpacing(0.08f);
-        heading.setPadding(0, dp(root.getContext(), 20), 0, dp(root.getContext(), 8));
+        heading.setPadding(0, dp(root.getContext(), 14), 0, dp(root.getContext(), 6));
         root.addView(heading);
     }
 }
