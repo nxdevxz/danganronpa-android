@@ -21,6 +21,7 @@ import android.system.Os;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -96,6 +97,12 @@ public class Launcher extends Activity {
     static final class Api30Helper {
         static boolean isExternalStorageManager() {
             return Environment.isExternalStorageManager();
+        }
+
+        static int[] safeArea(WindowInsets insets) {
+            android.graphics.Insets safe = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            return new int[] {safe.left, safe.top, safe.right, safe.bottom};
         }
     }
 
@@ -247,7 +254,7 @@ public class Launcher extends Activity {
         Lang.load(this);
         applyLauncherOrientation();
         P4gTheme.apply(this);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
                 new String[] {"360p", "480p", "720p", "1080p"},
                 new String[] {"360p", "480p", "720p", "1080p"},
@@ -486,6 +493,7 @@ public class Launcher extends Activity {
         setup.setFillViewport(true);
         setup.addView(root);
         setContentView(setup);
+        applySafeAreaInsets(setup);
         return;
         }
 
@@ -711,6 +719,7 @@ public class Launcher extends Activity {
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         screen.addView(play, playLayout);
         setContentView(screen);
+        applySafeAreaInsets(screen);
     }
 
     boolean installingShaders;
@@ -1276,5 +1285,22 @@ public class Launcher extends Activity {
         button.setMinHeight(dp(42));
         button.setMinimumHeight(dp(42));
         button.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    private void applySafeAreaInsets(View view) {
+        view.setOnApplyWindowInsetsListener((target, insets) -> {
+            int[] safe;
+            if (Build.VERSION.SDK_INT >= 30) {
+                safe = Api30Helper.safeArea(insets);
+            } else {
+                safe = new int[] {
+                        insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                        insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom()
+                };
+            }
+            target.setPadding(safe[0], safe[1], safe[2], safe[3]);
+            return insets;
+        });
+        view.requestApplyInsets();
     }
 }
