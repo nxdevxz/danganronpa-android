@@ -424,11 +424,7 @@ public class Launcher extends Activity {
         LinearLayout launcherSettings = settingsGroup(root, "launcher", t("Configurações do launcher", "Launcher settings"),
                 t("Idioma e orientação", "Language and orientation"), false);
         addRow(launcherSettings, t("Idioma do launcher", "Launcher language"),
-                Lang.isPortuguese() ? "Português" : "English", v -> {
-                    Lang.toggle(this);
-                    build(readyForPlay);
-                    refresh();
-                });
+                Lang.currentName(), v -> showLanguagePicker());
 
         addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
                 getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false)
@@ -446,6 +442,7 @@ public class Launcher extends Activity {
                             getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
                             Lang.load(this);
                             applyLauncherOrientation();
+                            build(readyForPlay);
                             refresh();
                         }).show());
 
@@ -722,6 +719,19 @@ public class Launcher extends Activity {
                             save();
                             updateButtons(getWindow().getDecorView());
                         }).show());
+    }
+
+    private void showLanguagePicker() {
+        new AlertDialog.Builder(this)
+                .setTitle(t("Idioma do launcher", "Launcher language"))
+                .setSingleChoiceItems(Lang.names(), Lang.currentIndex(), (dialog, which) -> {
+                    Lang.select(this, which);
+                    dialog.dismiss();
+                    build(readyForPlay);
+                    refresh();
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null)
+                .show();
     }
 
     private void showProfile(int slot) {

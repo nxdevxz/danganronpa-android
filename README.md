@@ -1,6 +1,6 @@
 # P4G — Persona 4 Golden for Android
 
-**0.5.0 Beta** · ARM64 · Vulkan · English app interface
+**0.5.0 Beta** · ARM64 · Vulkan · Multilingual app interface
 
 P4G is an unofficial Android port of the Nintendo Switch version of **Persona 4 Golden**. It uses native ARM64 execution and a compatibility runtime that translates the game's NVN graphics commands to Vulkan.
 
@@ -21,7 +21,7 @@ A full playthrough and broad device compatibility have **not** been verified. Pe
 - Local Maxwell-to-SPIR-V generation, including resource mappings. No game shader pack is included in the APK.
 - Automatic preparation checks when opening the app.
 - Separate preparation screen and main menu.
-- English app interface, including preparation and exit confirmation.
+- Launcher interface in English, Brazilian Portuguese, Spanish, French and German. English is the default.
 - Resolution, 16:9/16:10/stretch screen formats and FPS settings.
 - On-screen controls with adjustable size, opacity, position and sensitivity.
 - Save import and export, with backups before importing.
@@ -86,7 +86,7 @@ Back up your saves before updating. If Android rejects the update, check that bo
 
 **30 FPS** and **45 FPS** apply host-side frame-rate caps. **60 FPS** is the label for the existing game-default option: it does not guarantee a constant 60 FPS or override every frame-rate choice made by the game.
 
-The English app interface does not force the game itself into English. Game text and translation mods are separate.
+The launcher language does not change the game language. Game text and translation mods are separate.
 
 ## Saves
 
