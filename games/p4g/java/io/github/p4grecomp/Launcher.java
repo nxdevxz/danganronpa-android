@@ -254,7 +254,8 @@ public class Launcher extends Activity {
         Lang.load(this);
         applyLauncherOrientation();
         P4gTheme.apply(this);
-        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
                 new String[] {"360p", "480p", "720p", "1080p"},
                 new String[] {"360p", "480p", "720p", "1080p"},
@@ -347,9 +348,13 @@ public class Launcher extends Activity {
     }
 
     boolean readyForPlay;
-    void applyLauncherOrientation() {
-        boolean landscape = getSharedPreferences("launcher", MODE_PRIVATE)
+    boolean launcherLandscape() {
+        return getSharedPreferences("launcher", MODE_PRIVATE)
                 .getBoolean("landscape", DEFAULT_LANDSCAPE);
+    }
+
+    void applyLauncherOrientation() {
+        boolean landscape = launcherLandscape();
         setRequestedOrientation(landscape ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
     }
@@ -1288,6 +1293,7 @@ public class Launcher extends Activity {
     }
 
     private void applySafeAreaInsets(View view) {
+        if (launcherLandscape()) return;
         view.setOnApplyWindowInsetsListener((target, insets) -> {
             int[] safe;
             if (Build.VERSION.SDK_INT >= 30) {
