@@ -33,6 +33,10 @@ void game::after_init() {
     default_setting("NX_PIPE_PREWARM_INFLIGHT", "32");
     default_setting("NX_PIPE_PREWARM_SCAN", "64");
     default_setting("NX_AFFINITY", "2");
+    // The game asks for 16x anisotropic filtering on its ground and walls; on phone GPUs (Adreno 6xx, Mali-G5x/G7x)
+    // every pixel of the 3D pass pays for it. 4x is hard to tell apart at 720p and saves fragment/texture time.
+    // NX_MAX_ANISO=16 in config.txt restores the game's own value.
+    default_setting("NX_MAX_ANISO", "4");
     // 0.4.5 bounded vertex uploads scan every index of every indexed draw on the replay thread; in the logs it trimmed
     // 0 bindings ("bound" always equals "needed"), so it only cost CPU. 0.4.2 did not have it. NX_VERTEX_UPLOAD_RANGES=1
     // turns it back on.
