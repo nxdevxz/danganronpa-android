@@ -39,7 +39,15 @@ option(NX_RELEASE "Public build: no nx.log file, no file-triggered diagnostics" 
 # Keep link-time optimization opt-in: it is useful for public Android builds, while diagnostic builds retain
 # quicker links and ordinary object files for profiling. ThinLTO lets Clang optimize across runtime translation
 # units without the peak memory cost of full LTO.
-option(NX_ANDROID_THIN_LTO "Enable ThinLTO for Android Release native libraries" OFF)
+# On by default for Android builds (the public CI already builds with it): the replay thread's draw path crosses many
+# translation units (nvn_draw -> nvn_sets -> nvn_pipeline -> nvn_sampler), and ThinLTO inlines across them. Pass
+# -DNX_ANDROID_THIN_LTO=OFF for quicker diagnostic links.
+if(ANDROID)
+    set(NX_ANDROID_THIN_LTO_DEFAULT ON)
+else()
+    set(NX_ANDROID_THIN_LTO_DEFAULT OFF)
+endif()
+option(NX_ANDROID_THIN_LTO "Enable ThinLTO for Android Release native libraries" ${NX_ANDROID_THIN_LTO_DEFAULT})
 if(NX_TESTS AND NOT ANDROID)
     enable_testing()
     add_executable(gpu_pick_test tests/gpu_pick_test.cpp runtime/src/nvn/nvn_gpu_pick.cpp)
