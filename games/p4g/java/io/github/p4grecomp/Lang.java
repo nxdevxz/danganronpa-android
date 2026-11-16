@@ -47,13 +47,27 @@ final class Lang {
         add("P4G update .nsp (optional)", "Actualización de P4G .nsp (opcional)", "Mise à jour P4G .nsp (facultative)", "P4G-Update .nsp (optional)");
         add("Keys (prod.keys)", "Claves (prod.keys)", "Clés (prod.keys)", "Schlüssel (prod.keys)");
         add("Quick settings", "Ajustes rápidos", "Réglages rapides", "Schnelleinstellungen");
+        add("Configuration presets", "Preajustes de configuración", "Préréglages de configuration", "Konfigurationsprofile");
+        add("Choose between frame rate, balance and image quality.",
+                "Elige entre fluidez, equilibrio y calidad de imagen.",
+                "Choisissez entre fluidité, équilibre et qualité d’image.",
+                "Wähle zwischen Bildrate, Ausgewogenheit und Bildqualität.");
+        add("Performance", "Rendimiento", "Performances", "Leistung");
+        add("Quality", "Calidad", "Qualité", "Qualität");
+        add("Apply", "Aplicar", "Appliquer", "Anwenden");
+        add("Preset applied", "Preajuste aplicado", "Préréglage appliqué", "Profil angewendet");
         add("Game menu", "Menú del juego", "Menu du jeu", "Spielmenü");
         add("Continue", "Continuar", "Continuer", "Fortsetzen");
         add("Exit", "Salir", "Quitter", "Beenden");
-        add("Quick changes apply the next time the game opens. Exiting now may lose unsaved progress.",
-                "Los cambios rápidos se aplican la próxima vez que se abre el juego. Salir ahora puede perder el progreso no guardado.",
-                "Les changements rapides s’appliquent au prochain lancement. Quitter maintenant peut faire perdre la progression non sauvegardée.",
-                "Schnelle Änderungen gelten beim nächsten Start. Beim Beenden kann ungespeicherter Fortschritt verloren gehen.");
+        add("Exit the game?", "¿Salir del juego?", "Quitter le jeu ?", "Spiel beenden?");
+        add("Exit and return to the launcher? Unsaved progress may be lost.",
+                "¿Salir y volver al launcher? Se puede perder el progreso no guardado.",
+                "Quitter et revenir au launcher ? La progression non sauvegardée peut être perdue.",
+                "Beenden und zum Launcher zurückkehren? Ungespeicherter Fortschritt kann verloren gehen.");
+        add("Quick changes apply the next time the game opens.",
+                "Los cambios rápidos se aplican la próxima vez que se abre el juego.",
+                "Les changements rapides s’appliquent au prochain lancement du jeu.",
+                "Schnelle Änderungen gelten beim nächsten Spielstart.");
         add("Display, performance and controls", "Pantalla, rendimiento y controles", "Affichage, performances et commandes", "Anzeige, Leistung und Steuerung");
         add("Advanced graphics", "Gráficos avanzados", "Graphismes avancés", "Erweiterte Grafik");
         add("Driver and experimental settings", "Driver y ajustes experimentales", "Pilote et paramètres expérimentaux", "Treiber und experimentelle Einstellungen");

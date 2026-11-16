@@ -62,28 +62,33 @@ public class GameActivity extends NativeActivity {
             LinearLayout quick = new LinearLayout(this);
             quick.setOrientation(LinearLayout.VERTICAL);
             P4gTheme.section(quick, Lang.t("Configurações rápidas", "Quick settings"));
-            addQuickSetting(quick, config, Lang.t("Resolução de saída", "Output resolution"), "RESOLUTION",
-                    new String[] {"480p", "720p", "1080p"}, "720p");
             addQuickSetting(quick, config, Lang.t("Limite de FPS", "FPS limit"), "NX_FPS_CAP",
                     new String[] {"30", "45", "60"}, "30");
-            addQuickSetting(quick, config, Lang.t("Filtragem anisotrópica", "Anisotropic filtering"), "NX_MAX_ANISO",
-                    new String[] {"1", "2", "4", "8", "16"}, "4");
             addQuickSetting(quick, config, Lang.t("Controles na tela", "On-screen controls"), "NX_TOUCH_SHOW",
                     new String[] {"0", "1"}, "1");
             exitDialog = new P4gDialog.Builder(this)
                 .setTitle(Lang.t("Menu do jogo", "Game menu"))
-                .setMessage(Lang.t("As mudanças rápidas serão aplicadas na próxima vez que o jogo for aberto. Sair agora pode perder o progresso não salvo.",
-                        "Quick changes apply the next time the game opens. Exiting now may lose unsaved progress."))
+                .setMessage(Lang.t("As mudanças rápidas serão aplicadas na próxima vez que o jogo for aberto.",
+                        "Quick changes apply the next time the game opens."))
                 .setView(quick)
                 .setNegativeButton(Lang.t("Continuar", "Continue"), null)
+                .setPositiveButton(Lang.t("Sair", "Exit"), (dialog, which) -> confirmExitGame()).create();
+            exitDialog.show();
+        });
+    }
+
+    private void confirmExitGame() {
+        exitDialog = new P4gDialog.Builder(this)
+                .setTitle(Lang.t("Sair do jogo?", "Exit the game?"))
+                .setMessage(Lang.t("Quer mesmo sair e voltar ao launcher? O progresso não salvo pode ser perdido.",
+                        "Exit and return to the launcher? Unsaved progress may be lost."))
+                .setNegativeButton(Lang.t("Cancelar", "Cancel"), null)
                 .setPositiveButton(Lang.t("Sair", "Exit"), (dialog, which) -> {
                     startActivity(menuIntent());
                     // NativeActivity destruction stops the runtime. Since it is
                     // in :game, the launcher's process and menu stay alive.
                     finish();
-                }).create();
-            exitDialog.show();
-        });
+                }).show();
     }
 
     private void addQuickSetting(LinearLayout root, Map<String, String> config, String label, String key,
@@ -106,8 +111,7 @@ public class GameActivity extends NativeActivity {
         value.setOnClickListener(v -> {
             index[0] = (index[0] + 1) % values.length;
             String selectedValue = values[index[0]];
-            if ("RESOLUTION".equals(key)) Launcher.putResolution(config, selectedValue);
-            else config.put(key, selectedValue);
+            config.put(key, selectedValue);
             value.setText(quickLabel(key, selectedValue));
             Launcher.writeConfig(new File(Launcher.dataDir(), "config.txt"), config);
         });
@@ -117,8 +121,7 @@ public class GameActivity extends NativeActivity {
 
     private String quickLabel(String key, String value) {
         if ("NX_TOUCH_SHOW".equals(key)) return "1".equals(value) ? Lang.t("Ativados", "On") : Lang.t("Desativados", "Off");
-        if ("NX_MAX_ANISO".equals(key) && "1".equals(value)) return Lang.t("Desativada", "Off");
-        return "NX_MAX_ANISO".equals(key) ? value + "x" : value + ("NX_FPS_CAP".equals(key) ? " FPS" : "");
+        return value + ("NX_FPS_CAP".equals(key) ? " FPS" : "");
     }
     @Override public void onBackPressed() { confirmExit(); }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {

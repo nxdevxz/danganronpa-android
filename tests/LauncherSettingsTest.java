@@ -20,6 +20,12 @@ public final class LauncherSettingsTest {
         check(Launcher.optionGroup("NX_TOUCH_SHOW").equals("controls"));
         check(Launcher.optionGroup("NX_MAX_ANISO").equals("quick"));
         check(Launcher.optionGroup("NX_TRACE_PERF").equals("logs"));
+        check(java.util.Arrays.equals(Launcher.presetValues("performance"),
+                new String[] {"480p", "60", "1", "light", "0"}));
+        check(java.util.Arrays.equals(Launcher.presetValues("normal"),
+                new String[] {"720p", "30", "4", "standard", "0"}));
+        check(java.util.Arrays.equals(Launcher.presetValues("quality"),
+                new String[] {"1080p", "30", "16", "standard", "-0.5"}));
         check(Launcher.DEFAULT_LANDSCAPE);
         System.out.println("Launcher settings tests passed");
     }

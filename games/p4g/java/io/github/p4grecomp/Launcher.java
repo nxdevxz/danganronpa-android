@@ -519,6 +519,17 @@ public class Launcher extends Activity {
         playLayout.bottomMargin = dp(10);
         play.setOnClickListener(v -> installShadersAndPlay());
 
+        LinearLayout presets = settingsGroup(root, "presets",
+                t("Predefinições de configuração", "Configuration presets"),
+                t("Escolha entre desempenho, equilíbrio e qualidade de imagem.",
+                        "Choose between frame rate, balance and image quality."), true);
+        addRow(presets, t("Desempenho", "Performance"), t("Aplicar", "Apply"),
+                v -> applyPreset("performance"));
+        addRow(presets, t("Normal", "Normal"), t("Aplicar", "Apply"),
+                v -> applyPreset("normal"));
+        addRow(presets, t("Qualidade", "Quality"), t("Aplicar", "Apply"),
+                v -> applyPreset("quality"));
+
         LinearLayout quick = settingsGroup(root, "quick", t("Ajustes rápidos", "Quick settings"),
                 t("Tela, desempenho e controles", "Display, performance and controls"), true);
         LinearLayout graphics = settingsGroup(root, "graphics", t("Gráficos avançados", "Advanced graphics"),
@@ -765,6 +776,24 @@ public class Launcher extends Activity {
     static boolean isOverlayToggle(String key) {
         return key.equals("NX_SHOW_FPS") || key.equals("NX_OVERLAY_CPU") ||
                 key.equals("NX_OVERLAY_GPU") || key.equals("NX_OVERLAY_RAM");
+    }
+
+    static String[] presetValues(String preset) {
+        if ("performance".equals(preset)) return new String[] {"480p", "60", "1", "light", "0"};
+        if ("quality".equals(preset)) return new String[] {"1080p", "30", "16", "standard", "-0.5"};
+        return new String[] {"720p", "30", "4", "standard", "0"};
+    }
+
+    private void applyPreset(String preset) {
+        String[] keys = {"RESOLUTION", "NX_FPS_CAP", "NX_MAX_ANISO", "NX_PIPE_PREWARM_LOAD", "NX_LOD_BIAS"};
+        String[] values = presetValues(preset);
+        for (Option option : options)
+            for (int i = 0; i < keys.length; i++)
+                if (keys[i].equals(option.key)) option.select(values[i]);
+        if (save()) {
+            updateButtons(getWindow().getDecorView());
+            Toast.makeText(this, t("Predefinição aplicada", "Preset applied"), Toast.LENGTH_SHORT).show();
+        }
     }
 
     private void addResetRow(LinearLayout parent, String group) {

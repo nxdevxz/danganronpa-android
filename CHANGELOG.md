@@ -4,8 +4,9 @@
 
 ### Launcher
 
+- Added Performance, Normal and Quality configuration presets to the main launcher screen.
 - Replaced Android's standard dialogs throughout the launcher, preparation, controls, drivers and mods with one dark/gold dialog matching the app.
-- Replaced the in-game Back confirmation with a custom game menu containing resolution, FPS limit, anisotropic filtering and on-screen control shortcuts plus Continue and Exit actions.
+- Replaced the in-game Back confirmation with a compact custom menu containing FPS and on-screen control shortcuts; Exit now asks for confirmation.
 - Improved game performance by reducing the default anisotropic filtering from 16x to 4x, while adding localized Off, 2x, 4x, 8x and 16x choices to Quick settings.
 - Moved On-screen controls from Quick settings to the Controls section.
 - Removed the 360p output option, leaving 480p, 720p (default) and 1080p.
