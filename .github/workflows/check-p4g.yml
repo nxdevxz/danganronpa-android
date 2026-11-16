@@ -40,7 +40,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for test in nvn_origin nvn_frame_pacing android_surface_size input_stick prewarm_budget frame_history audio_ring; do
+          for test in nvn_origin nvn_frame_pacing android_surface_size input_stick prewarm_budget audio_ring; do
             c++ -std=c++17 -Wall -Wextra -Werror -pthread -I runtime/src "tests/${test}_test.cpp" -o "$RUNNER_TEMP/$test"
             "$RUNNER_TEMP/$test"
           done

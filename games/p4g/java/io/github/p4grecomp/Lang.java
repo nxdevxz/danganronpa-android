@@ -47,6 +47,13 @@ final class Lang {
         add("P4G update .nsp (optional)", "Actualización de P4G .nsp (opcional)", "Mise à jour P4G .nsp (facultative)", "P4G-Update .nsp (optional)");
         add("Keys (prod.keys)", "Claves (prod.keys)", "Clés (prod.keys)", "Schlüssel (prod.keys)");
         add("Quick settings", "Ajustes rápidos", "Réglages rapides", "Schnelleinstellungen");
+        add("Game menu", "Menú del juego", "Menu du jeu", "Spielmenü");
+        add("Continue", "Continuar", "Continuer", "Fortsetzen");
+        add("Exit", "Salir", "Quitter", "Beenden");
+        add("Quick changes apply the next time the game opens. Exiting now may lose unsaved progress.",
+                "Los cambios rápidos se aplican la próxima vez que se abre el juego. Salir ahora puede perder el progreso no guardado.",
+                "Les changements rapides s’appliquent au prochain lancement. Quitter maintenant peut faire perdre la progression non sauvegardée.",
+                "Schnelle Änderungen gelten beim nächsten Start. Beim Beenden kann ungespeicherter Fortschritt verloren gehen.");
         add("Display, performance and controls", "Pantalla, rendimiento y controles", "Affichage, performances et commandes", "Anzeige, Leistung und Steuerung");
         add("Advanced graphics", "Gráficos avanzados", "Graphismes avancés", "Erweiterte Grafik");
         add("Driver and experimental settings", "Driver y ajustes experimentales", "Pilote et paramètres expérimentaux", "Treiber und experimentelle Einstellungen");
@@ -71,8 +78,14 @@ final class Lang {
         add("Screen format", "Formato de pantalla", "Format d’écran", "Bildformat");
         add("Stretch", "Estirar", "Étirer", "Strecken");
         add("FPS limit", "Límite de FPS", "Limite de FPS", "FPS-Limit");
-        add("FPS counter", "Contador de FPS", "Compteur de FPS", "FPS-Zähler");
-        add("Frame time graph", "Gráfico de tiempo por fotograma", "Graphique du temps par image", "Framezeit-Diagramm");
+        add("Anisotropic filtering", "Filtrado anisotrópico", "Filtrage anisotrope", "Anisotrope Filterung");
+        add("Off (best performance)", "Desactivado (máximo rendimiento)", "Désactivé (performances maximales)", "Aus (beste Leistung)");
+        add("2x (faster)", "2x (rápido)", "2x (rapide)", "2x (schneller)");
+        add("4x (default)", "4x (predeterminado)", "4x (par défaut)", "4x (Standard)");
+        add("8x (higher quality)", "8x (mayor calidad)", "8x (meilleure qualité)", "8x (höhere Qualität)");
+        add("16x (best quality)", "16x (máxima calidad)", "16x (qualité maximale)", "16x (beste Qualität)");
+        add("Overlay size", "Tamaño del overlay", "Taille de l’overlay", "Overlay-Größe");
+        add("100% (default)", "100% (predeterminado)", "100% (par défaut)", "100% (Standard)");
         add("Detailed performance logging", "Registro detallado de rendimiento", "Journal détaillé des performances", "Detaillierte Leistungsprotokolle");
         add("Pipeline prewarming (experimental)", "Precalentamiento de pipelines (experimental)", "Préchauffage des pipelines (expérimental)", "Pipeline-Vorwärmung (experimentell)");
         add("Background", "Segundo plano", "Arrière-plan", "Hintergrund");

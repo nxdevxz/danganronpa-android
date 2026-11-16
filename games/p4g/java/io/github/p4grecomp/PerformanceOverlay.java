@@ -26,8 +26,8 @@ import java.util.Map;
 /** One sample per second, off the render/UI threads; no metric logs or overlay permission. */
 final class PerformanceOverlay {
     private final GameActivity activity;
-    private final boolean fps, cpu, gpu, ram, frameTime;
-    private float[] frameTimes = new float[0];
+    private final boolean fps, cpu, gpu, ram;
+    private final float sizeScale;
     private HandlerThread thread;
     private Handler worker;
     private SurfaceView panel;
@@ -48,8 +48,11 @@ final class PerformanceOverlay {
         cpu = "1".equals(config.get("NX_OVERLAY_CPU"));
         gpu = "1".equals(config.get("NX_OVERLAY_GPU"));
         ram = "1".equals(config.get("NX_OVERLAY_RAM"));
-        frameTime = "1".equals(config.get("NX_OVERLAY_FRAME_TIME"));
-        if (!(fps || cpu || gpu || ram || frameTime)) return;
+        float selectedSize = 1.0f;
+        try { selectedSize = Integer.parseInt(config.get("NX_OVERLAY_SIZE")) / 100.0f; }
+        catch (Exception ignored) { }
+        sizeScale = Math.max(0.5f, Math.min(1.5f, selectedSize));
+        if (!(fps || cpu || gpu || ram)) return;
         panel = new SurfaceView(activity);
         // NativeActivity gives its normal window surface directly to Vulkan. A TextView in that
         // window can therefore be rendered behind the game. This transparent SurfaceView is a
@@ -73,7 +76,7 @@ final class PerformanceOverlay {
         panel.setFocusable(false);
         panel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         paint.setTypeface(android.graphics.Typeface.MONOSPACE);
-        baseTextSize = P4gTheme.dp(activity, 10);
+        baseTextSize = P4gTheme.dp(activity, 10) * sizeScale;
         paint.setTextSize(baseTextSize);
         paint.setColor(P4gTheme.YELLOW);
         background.setColor(0xB3141414);
@@ -82,7 +85,7 @@ final class PerformanceOverlay {
         requestPhysicalBuffer();
     }
 
-    /** Keeps this compositor layer at window pixels even when Vulkan selects a 360p/480p/720p buffer. */
+    /** Keeps this compositor layer at window pixels even when Vulkan selects a lower-resolution buffer. */
     private void requestPhysicalBuffer() {
         if (panel == null) return;
         panel.post(() -> {
@@ -145,14 +148,6 @@ final class PerformanceOverlay {
                                 Math.max(0L, used - lastCpu) * 100.0 / (elapsed * cpuCores))));
                 if (gpu) append(text, "GPU: " + gpuUsage());
                 if (ram) append(text, "RAM app: " + residentMemory());
-                if (frameTime) {
-                    try { frameTimes = GameActivity.nativeFrameTimes(); }
-                    catch (UnsatisfiedLinkError ignored) { frameTimes = new float[0]; }
-                    float worst = 0;
-                    for (float ms : frameTimes) worst = Math.max(worst, ms);
-                    append(text, frameTimes.length == 0 ? "Frame: —" : String.format(Locale.US,
-                            "Frame: %.1f ms | max %.1f", frameTimes[frameTimes.length - 1], worst));
-                }
                 lastTime = now; lastCpu = used; lastFrames = frames; first = false;
                 String label = text.toString();
                 draw(label, token);
@@ -171,8 +166,8 @@ final class PerformanceOverlay {
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
             String[] lines = text.split("\\n");
             float shortSide = Math.max(1.0f, Math.min(canvas.getWidth(), canvas.getHeight()));
-            float edge = Math.min(P4gTheme.dp(activity, 6), shortSide * 0.02f);
-            float pad = Math.min(P4gTheme.dp(activity, 5), shortSide * 0.018f);
+            float edge = Math.min(P4gTheme.dp(activity, 6) * sizeScale, shortSide * 0.02f);
+            float pad = Math.min(P4gTheme.dp(activity, 5) * sizeScale, shortSide * 0.027f);
             // requestPhysicalBuffer keeps this canvas in window pixels. The fit below remains a
             // safety net for unusual multi-window bounds and long localized metric strings.
             paint.setTextSize(baseTextSize);
@@ -190,35 +185,13 @@ final class PerformanceOverlay {
                 lineHeight = paint.getTextSize() * 1.20f;
             }
             float panelWidth = Math.min(canvas.getWidth() - edge * 2.0f, width + pad * 2.0f);
-            float graphHeight = frameTime ? Math.min(P4gTheme.dp(activity, 48), shortSide * 0.15f) : 0;
-            if (frameTime) panelWidth = Math.min(canvas.getWidth() - edge * 2.0f,
-                    Math.max(panelWidth, P4gTheme.dp(activity, 220)));
             float panelHeight = Math.min(canvas.getHeight() - edge * 2.0f,
-                    lines.length * lineHeight + pad * 1.4f + graphHeight);
+                    lines.length * lineHeight + pad * 1.4f);
             float left = edge;
             float top = edge;
             canvas.drawRoundRect(left, top, left + panelWidth, top + panelHeight, pad, pad, background);
             float y = top + pad + paint.getTextSize();
             for (String line : lines) { canvas.drawText(line, left + pad, y, paint); y += lineHeight; }
-            if (frameTime && frameTimes.length > 0) {
-                float bottom = top + panelHeight - pad;
-                float graphTop = top + lines.length * lineHeight + pad;
-                float height = Math.max(0, bottom - graphTop);
-                float graphWidth = Math.max(1, panelWidth - pad * 2);
-                float maximum = 50;
-                for (float ms : frameTimes) maximum = Math.max(maximum, ms);
-                paint.setColor(0x668D99AD);
-                canvas.drawLine(left + pad, bottom - height * 33.333f / maximum,
-                        left + pad + graphWidth, bottom - height * 33.333f / maximum, paint);
-                paint.setColor(P4gTheme.YELLOW);
-                paint.setStrokeWidth(Math.max(1, P4gTheme.dp(activity, 1)));
-                for (int i = 1; i < frameTimes.length; i++) {
-                    float x0 = left + pad + graphWidth * (i - 1) / 119.0f;
-                    float x1 = left + pad + graphWidth * i / 119.0f;
-                    canvas.drawLine(x0, bottom - height * frameTimes[i - 1] / maximum,
-                            x1, bottom - height * frameTimes[i] / maximum, paint);
-                }
-            }
         } catch (IllegalArgumentException ignored) {
         } finally {
             if (canvas != null) holder.unlockCanvasAndPost(canvas);

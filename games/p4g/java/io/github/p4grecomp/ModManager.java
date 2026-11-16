@@ -1,6 +1,5 @@
 package io.github.p4grecomp;
 
-import android.app.AlertDialog;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
@@ -8,7 +7,7 @@ import java.util.Map;
 /** Scans and changes mod folders off the UI thread. Changes take effect on the next game start. */
 final class ModManager {
     private final Launcher activity;
-    private AlertDialog dialog;
+    private P4gDialog dialog;
     private boolean busy;
 
     ModManager(Launcher activity) { this.activity = activity; }
@@ -27,7 +26,7 @@ final class ModManager {
 
     private void reload(ModFiles.Mod change, boolean enabled) {
         busy = true;
-        AlertDialog progress = new AlertDialog.Builder(activity)
+        P4gDialog progress = new P4gDialog.Builder(activity)
                 .setTitle(t("Mods e traduções", "Mods and translations"))
                 .setMessage(change == null ? t("Lendo mods instalados…", "Reading installed mods...")
                         : t("Atualizando mod…", "Updating mod..."))
@@ -51,7 +50,7 @@ final class ModManager {
                 if (!alive()) return;
                 progress.dismiss();
                 if (failure == null) showMods(result);
-                else dialog = new AlertDialog.Builder(activity).setTitle(t("Não foi possível atualizar os mods", "Could not read or update mods"))
+                else dialog = new P4gDialog.Builder(activity).setTitle(t("Não foi possível atualizar os mods", "Could not read or update mods"))
                         .setMessage(failure).setPositiveButton(t("Tentar novamente", "Retry"), (d, w) -> reload(null, false))
                         .setNegativeButton(t("Fechar", "Close"), null).show();
             });
@@ -59,7 +58,7 @@ final class ModManager {
     }
 
     private void showMods(ModFiles.Snapshot snapshot) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle(t("Mods e traduções", "Mods and translations"))
+        P4gDialog.Builder builder = new P4gDialog.Builder(activity).setTitle(t("Mods e traduções", "Mods and translations"))
                 .setNegativeButton(t("Fechar", "Close"), null);
         if (snapshot.mods.isEmpty()) {
             builder.setMessage(t("Nenhum mod encontrado. Importe uma tradução com Importar CPK ou coloque um mod em "
@@ -84,7 +83,7 @@ final class ModManager {
 
     private void showMod(ModFiles.Snapshot snapshot, ModFiles.Mod mod) {
         String path = Launcher.dataDir().toPath().relativize(mod.path.toPath()).toString();
-        dialog = new AlertDialog.Builder(activity).setTitle(mod.name)
+        dialog = new P4gDialog.Builder(activity).setTitle(mod.name)
                 .setMessage((mod.enabled ? t("Ativado", "Enabled") : t("Desativado", "Disabled")) + " · "
                         + mod.files.size() + t(" arquivos\n", " files\n") + path
                         + t("\n\nAs mudanças serão aplicadas ao abrir o jogo novamente.",
@@ -100,7 +99,7 @@ final class ModManager {
             reload(mod, !mod.enabled);
             return;
         }
-        dialog = new AlertDialog.Builder(activity).setTitle(t("Ativar mod com conflitos?", "Enable overlapping mod?"))
+        dialog = new P4gDialog.Builder(activity).setTitle(t("Ativar mod com conflitos?", "Enable overlapping mod?"))
                 .setMessage(t("Este mod substitui ", "This mod replaces ") + overlaps
                         + t(" arquivos também fornecidos por mods ativos. A última pasta em ordem alfabética terá prioridade.",
                                 " files also supplied by enabled mods. For each file, the last folder in alphabetical order takes priority."))
@@ -109,7 +108,7 @@ final class ModManager {
     }
 
     private void showFiles(ModFiles.Snapshot snapshot, ModFiles.Mod mod) {
-        AlertDialog.Builder builder = new AlertDialog.Builder(activity).setTitle(mod.name + t(" · Arquivos", " · Files"))
+        P4gDialog.Builder builder = new P4gDialog.Builder(activity).setTitle(mod.name + t(" · Arquivos", " · Files"))
                 .setNegativeButton(t("Voltar", "Back"), (d, w) -> showMod(snapshot, mod));
         if (mod.files.isEmpty()) builder.setMessage(t("A pasta deste mod está vazia.", "This mod folder is empty."));
         else {
@@ -136,7 +135,7 @@ final class ModManager {
             line.append(t("\nUsado de ", "\nUsed from ")).append(owners.get(owners.size() - 1).name);
             rows[index++] = line.toString();
         }
-        dialog = new AlertDialog.Builder(activity).setTitle(t("Arquivos em conflito", "Conflicting files"))
+        dialog = new P4gDialog.Builder(activity).setTitle(t("Arquivos em conflito", "Conflicting files"))
                 .setItems(rows, null).setNegativeButton(t("Voltar", "Back"), (d, w) -> showMods(snapshot)).show();
     }
 }

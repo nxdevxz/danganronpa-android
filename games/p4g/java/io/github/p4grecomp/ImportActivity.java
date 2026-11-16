@@ -1,7 +1,6 @@
 package io.github.p4grecomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
@@ -67,7 +66,7 @@ public class ImportActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (!running) { setResult(RESULT_CANCELED); finish(); }
-        else new AlertDialog.Builder(this).setTitle(t("Cancelar preparação?", "Cancel preparation?"))
+        else new P4gDialog.Builder(this).setTitle(t("Cancelar preparação?", "Cancel preparation?"))
             .setMessage(t("A instalação temporária será descartada. A instalação anterior continuará disponível.",
                     "The temporary installation will be discarded. Any previous installation stays available."))
             .setPositiveButton(t("Cancelar preparação", "Cancel preparation"), (d, w) -> {
@@ -82,7 +81,7 @@ public class ImportActivity extends Activity {
     }
     void fail(String message) {
         status.setText(message);
-        new AlertDialog.Builder(this).setTitle(t("Falha na preparação", "Preparation failed")).setMessage(message)
+        new P4gDialog.Builder(this).setTitle(t("Falha na preparação", "Preparation failed")).setMessage(message)
             .setPositiveButton("OK", (d, w) -> { setResult(RESULT_CANCELED); finish(); })
             .setOnCancelListener(d -> { setResult(RESULT_CANCELED); finish(); }).show();
     }

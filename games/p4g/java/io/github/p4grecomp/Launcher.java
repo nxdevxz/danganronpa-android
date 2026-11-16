@@ -1,7 +1,6 @@
 package io.github.p4grecomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -24,6 +23,7 @@ import android.view.View;
 import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -257,9 +257,9 @@ public class Launcher extends Activity {
         if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
-                new String[] {"360p", "480p", "720p", "1080p"},
-                new String[] {"360p", "480p", "720p", "1080p"},
-                new String[] {"360p", "480p", "720p", "1080p"}, 2));
+                new String[] {"480p", "720p", "1080p"},
+                new String[] {"480p", "720p", "1080p"},
+                new String[] {"480p", "720p", "1080p"}, 1));
         options.add(new Option("NX_STRETCH", "Formato da tela", "Screen format",
                 new String[] {"0", "16:10", "1"},
                 new String[] {"16:9", "16:10", "Esticar"},
@@ -267,15 +267,22 @@ public class Launcher extends Activity {
         options.add(new Option("NX_FPS_CAP", "Limite de FPS", "FPS limit", new String[] {"30", "45", "60"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"}, 0));
-        options.add(new Option("NX_SHOW_FPS", "Contador de FPS", "FPS counter", new String[] {"0", "1"},
+        options.add(new Option("NX_MAX_ANISO", "Filtragem anisotrópica", "Anisotropic filtering",
+                new String[] {"1", "2", "4", "8", "16"},
+                new String[] {"Desativada (mais desempenho)", "2x (rápido)", "4x (padrão)",
+                        "8x (mais qualidade)", "16x (qualidade máxima)"},
+                new String[] {"Off (best performance)", "2x (faster)", "4x (default)",
+                        "8x (higher quality)", "16x (best quality)"}, 2));
+        options.add(new Option("NX_OVERLAY_SIZE", "Tamanho do overlay", "Overlay size",
+                new String[] {"50", "80", "100", "125", "150"},
+                new String[] {"50%", "80%", "100% (padrão)", "125%", "150%"},
+                new String[] {"50%", "80%", "100% (default)", "125%", "150%"}, 2));
+        options.add(new Option("NX_SHOW_FPS", "FPS", "FPS", new String[] {"0", "1"},
                 new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
         for (String metric : new String[] {"CPU", "GPU", "RAM"}) {
             options.add(new Option("NX_OVERLAY_" + metric, metric, metric, new String[] {"0", "1"},
                     new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
         }
-        options.add(new Option("NX_OVERLAY_FRAME_TIME", "Gráfico de tempo por quadro", "Frame time graph",
-                new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
-                new String[] {"Off", "On"}, 0));
         options.add(new Option("NX_TRACE_PERF", "Estatísticas detalhadas de desempenho", "Detailed performance logging",
                 new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
                 new String[] {"Off", "On"}, 0));
@@ -450,7 +457,7 @@ public class Launcher extends Activity {
                     applyLauncherOrientation();
                 });
         addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
-                t("Redefinir", "Reset"), v -> new AlertDialog.Builder(this)
+                t("Redefinir", "Reset"), v -> new P4gDialog.Builder(this)
                         .setMessage(t("Redefinir o idioma e a orientação do launcher?",
                                 "Reset the launcher language and orientation?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -570,6 +577,24 @@ public class Launcher extends Activity {
         addRow(support, t("Reportar um problema", "Report an issue"), t("Abrir", "Open"),
                 v -> openExternal("https://github.com/nxdevxz/p4g-android/issues/new/choose"));
         for (final Option o : options) {
+            String group = optionGroup(o.key);
+            if (isOverlayToggle(o.key)) {
+                CheckBox toggle = new CheckBox(this);
+                toggle.setText(t(o.pt, o.en));
+                toggle.setTextColor(P4gTheme.TEXT);
+                toggle.setTextSize(16);
+                toggle.setMinHeight(dp(44));
+                toggle.setPadding(dp(4), 0, dp(4), 0);
+                toggle.setButtonTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+                toggle.setChecked("1".equals(o.values[o.pick]));
+                toggle.setTag(o);
+                toggle.setOnClickListener(v -> {
+                    o.pick = ((CheckBox) v).isChecked() ? 1 : 0;
+                    save();
+                });
+                overlay.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
+                continue;
+            }
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
@@ -595,7 +620,6 @@ public class Launcher extends Activity {
                 }
             });
             value.setTag(o);
-            String group = optionGroup(o.key);
             (group.equals("quick") ? quick : group.equals("logs") ? diagnostics :
                     group.equals("overlay") ? overlay : group.equals("controls") ? controls : graphics).addView(row);
         }
@@ -730,16 +754,22 @@ public class Launcher extends Activity {
     boolean installingShaders;
 
     static String optionGroup(String key) {
-        if (key.equals("RESOLUTION") || key.equals("NX_STRETCH") || key.equals("NX_FPS_CAP") || key.equals("NX_TOUCH_SHOW")) return "quick";
+        if (key.equals("RESOLUTION") || key.equals("NX_STRETCH") || key.equals("NX_FPS_CAP") ||
+                key.equals("NX_MAX_ANISO")) return "quick";
         if (key.equals("NX_TRACE_PERF")) return "logs";
         if (key.equals("NX_SHOW_FPS") || key.startsWith("NX_OVERLAY_")) return "overlay";
         if (key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
         return "graphics";
     }
 
+    static boolean isOverlayToggle(String key) {
+        return key.equals("NX_SHOW_FPS") || key.equals("NX_OVERLAY_CPU") ||
+                key.equals("NX_OVERLAY_GPU") || key.equals("NX_OVERLAY_RAM");
+    }
+
     private void addResetRow(LinearLayout parent, String group) {
         addRow(parent, t("Redefinir configurações", "Reset settings"), t("Redefinir", "Reset"),
-                v -> new AlertDialog.Builder(this)
+                v -> new P4gDialog.Builder(this)
                         .setMessage(t("Redefinir as configurações desta seção para o padrão?",
                                 "Reset this section's settings to defaults?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -751,7 +781,7 @@ public class Launcher extends Activity {
     }
 
     private void showLanguagePicker() {
-        new AlertDialog.Builder(this)
+        new P4gDialog.Builder(this)
                 .setTitle(t("Idioma do launcher", "Launcher language"))
                 .setSingleChoiceItems(Lang.names(), Lang.currentIndex(), (dialog, which) -> {
                     Lang.select(this, which);
@@ -766,7 +796,7 @@ public class Launcher extends Activity {
     private void showProfile(int slot) {
         SharedPreferences profile = getSharedPreferences("profile_" + slot, MODE_PRIVATE);
         String title = t("Perfil ", "Profile ") + slot;
-        new AlertDialog.Builder(this).setTitle(title)
+        new P4gDialog.Builder(this).setTitle(title)
                 .setItems(new String[] {t("Carregar", "Load"), t("Salvar configuração atual", "Save current settings")}, (dialog, action) -> {
                     if (action == 0) {
                         if (!profile.getBoolean("saved", false)) {
@@ -780,7 +810,7 @@ public class Launcher extends Activity {
                         save();
                         updateButtons(getWindow().getDecorView());
                     } else {
-                        new AlertDialog.Builder(this).setTitle(title)
+                        new P4gDialog.Builder(this).setTitle(title)
                                 .setMessage(t("Salvar as opções atuais neste perfil? Substitui o perfil anterior.",
                                         "Save current options here? This replaces the previous profile."))
                                 .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -873,7 +903,10 @@ public class Launcher extends Activity {
     }
 
     void updateButtons(View v) {
-        if (v instanceof Button && v.getTag() instanceof Option) {
+        if (v instanceof CheckBox && v.getTag() instanceof Option) {
+            Option o = (Option) v.getTag();
+            ((CheckBox) v).setChecked("1".equals(o.values[o.pick]));
+        } else if (v instanceof Button && v.getTag() instanceof Option) {
             Option o = (Option) v.getTag();
             ((Button) v).setText(label((Option) v.getTag()));
         } else if (v instanceof android.view.ViewGroup) {
@@ -883,7 +916,7 @@ public class Launcher extends Activity {
     }
 
     void tell(String title, String message) {
-        new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
+        new P4gDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
     }
 
     void openExternal(String url) {
@@ -895,7 +928,7 @@ public class Launcher extends Activity {
     }
 
     void askImport() {
-        new AlertDialog.Builder(this)
+        new P4gDialog.Builder(this)
                 .setTitle(t("Importar saves", "Import saves"))
                 .setMessage(t("Escolha um arquivo ZIP ou uma pasta com saves do Persona 4 Golden. "
                                 + "Seus saves atuais serão copiados antes da importação.",
@@ -1024,7 +1057,7 @@ public class Launcher extends Activity {
         importingDriver = false;
         if (isFinishing() || isDestroyed()) return;
         if (error != null) {
-            new AlertDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
+            new P4gDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
                     .setPositiveButton("Back", (d, w) -> showDrivers()).show();
         } else {
             Toast.makeText(this, "Driver imported and selected.", Toast.LENGTH_SHORT).show();
@@ -1057,7 +1090,7 @@ public class Launcher extends Activity {
                 exportingLogs = false;
                 if (isFinishing() || isDestroyed()) return;
                 if (failure != null) tell(t("Não foi possível exportar os logs", "Could not export logs"), failure);
-                else new AlertDialog.Builder(this)
+                else new P4gDialog.Builder(this)
                         .setTitle(t("Logs exportados", "Logs exported"))
                         .setMessage(Lang.f("Salvos em Downloads/%s.", "Saved to Downloads/%s.", file.name))
                         .setPositiveButton(t("Compartilhar", "Share"), (dialog, which) -> shareLogs(file))
@@ -1139,6 +1172,26 @@ public class Launcher extends Activity {
         config.putAll(readConfig(new File(dataDir(), "config.txt")));
     }
 
+    static void putResolution(Map<String, String> target, String resolution) {
+        target.put("RESOLUTION", resolution);
+        if ("480p".equals(resolution)) {
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", "854x480");
+            target.put("NX_RENDER_RES", "854x480");
+            target.put("NX_RES", "480p");
+        } else if ("1080p".equals(resolution)) {
+            target.put("NX_HANDHELD", "0");
+            target.put("resolution", "1920x1080");
+            target.put("NX_RENDER_RES", "1920x1080");
+            target.put("NX_RES", "1080p");
+        } else {
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", "1280x720");
+            target.put("NX_RENDER_RES", "1280x720");
+            target.put("NX_RES", "720p");
+        }
+    }
+
     boolean save() {
         if (!hasAccess()) { askAccess(); return false; }
         dataDir().mkdirs();
@@ -1148,29 +1201,9 @@ public class Launcher extends Activity {
         }
         load();
         for (Option o : options) config.put(o.key, o.values[o.pick]);
-        final String res = config.get("RESOLUTION");
-        if ("360p".equals(res)) {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "640x360");
-            config.put("NX_RENDER_RES", "640x360");
-            config.put("NX_RES", "360p");
-        } else if ("480p".equals(res)) {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "854x480");
-            config.put("NX_RENDER_RES", "854x480");
-            config.put("NX_RES", "480p");
-        } else if ("1080p".equals(res)) {
-            config.put("NX_HANDHELD", "0");
-            config.put("resolution", "1920x1080");
-            config.put("NX_RENDER_RES", "1920x1080");
-            config.put("NX_RES", "1080p");
-        } else {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "1280x720");
-            config.put("NX_RENDER_RES", "1280x720");
-            config.put("NX_RES", "720p");
-        }
+        putResolution(config, config.get("RESOLUTION"));
         for (String k : new String[] {"RENDER_SCALE", "NX_ANISO_MAX"}) config.remove(k);
+        config.remove("NX_OVERLAY_FRAME_TIME");
         for (String key : new String[] {"language", "GRAPHICS", "NX_GAMEPAD_LAYOUT"}) config.remove(key);
         if (writeConfig(new File(dataDir(), "config.txt"), config)) return true;
         tell(t("Erro ao salvar", "Could not save"), t("Verifique o espaço livre e a permissão de armazenamento.",

@@ -11,10 +11,14 @@ public final class LauncherSettingsTest {
         check(option.pick == 1);
         option.select(null);
         check(option.pick == option.defaultPick);
-        check(Launcher.optionGroup("NX_OVERLAY_FRAME_TIME").equals("overlay"));
+        check(Launcher.optionGroup("NX_OVERLAY_SIZE").equals("overlay"));
+        check(Launcher.isOverlayToggle("NX_SHOW_FPS"));
+        check(Launcher.isOverlayToggle("NX_OVERLAY_RAM"));
+        check(!Launcher.isOverlayToggle("NX_OVERLAY_SIZE"));
         check(Launcher.optionGroup("NX_PIPE_PREWARM_LOAD").equals("graphics"));
         check(Launcher.optionGroup("NX_TOUCH_OPACITY").equals("controls"));
-        check(Launcher.optionGroup("NX_TOUCH_SHOW").equals("quick"));
+        check(Launcher.optionGroup("NX_TOUCH_SHOW").equals("controls"));
+        check(Launcher.optionGroup("NX_MAX_ANISO").equals("quick"));
         check(Launcher.optionGroup("NX_TRACE_PERF").equals("logs"));
         check(Launcher.DEFAULT_LANDSCAPE);
         System.out.println("Launcher settings tests passed");

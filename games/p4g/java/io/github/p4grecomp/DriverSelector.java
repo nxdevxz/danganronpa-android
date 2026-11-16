@@ -1,6 +1,5 @@
 package io.github.p4grecomp;
 
-import android.app.AlertDialog;
 import android.content.res.ColorStateList;
 import android.view.Gravity;
 import android.widget.Button;
@@ -14,7 +13,7 @@ import java.util.List;
 /** Persistent driver selection. File operations run in the launcher, outside the game process. */
 final class DriverSelector {
     private final Launcher activity;
-    private AlertDialog dialog;
+    private P4gDialog dialog;
     private boolean busy;
 
     private interface Operation { void run() throws IOException; }
@@ -34,7 +33,7 @@ final class DriverSelector {
     private void reload(Operation operation) {
         busy = true;
         dismiss();
-        AlertDialog progress = new AlertDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
+        P4gDialog progress = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
                 .setMessage(t("Atualizando lista de drivers…", "Updating driver list...")).setCancelable(false).create();
         dialog = progress;
         progress.show();
@@ -56,7 +55,7 @@ final class DriverSelector {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 progress.dismiss();
                 if (failure == null) showList(saved, active);
-                else dialog = new AlertDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
+                else dialog = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
                         .setMessage(failure).setPositiveButton(t("Voltar", "Back"), (d, w) -> reload(null))
                         .setNegativeButton(t("Fechar", "Close"), null).show();
             });
@@ -86,7 +85,7 @@ final class DriverSelector {
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
         int height = Math.max(P4gTheme.dp(activity, 100), screenHeight - P4gTheme.dp(activity, 210));
         content.addView(scroll, new LinearLayout.LayoutParams(-1, Math.min(height, P4gTheme.dp(activity, 300))));
-        dialog = new AlertDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver")).setView(content)
+        dialog = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver")).setView(content)
                 .setPositiveButton(t("Importar", "Import"), (d, w) -> activity.pick(Launcher.PICK_DRIVER, "*/*", false))
                 .setNegativeButton(t("Fechar", "Close"), null).show();
     }

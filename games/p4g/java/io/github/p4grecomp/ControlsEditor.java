@@ -1,9 +1,7 @@
 package io.github.p4grecomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -191,7 +189,7 @@ public class ControlsEditor extends Activity {
             labels[k] = i >= 10 && i <= 13 ? t("Direcional ", "D-pad ") + LABELS[i] : LABELS[i];
             shown[k++] = !hidden[i];
         }
-        AlertDialog dialog = new AlertDialog.Builder(this)
+        P4gDialog dialog = new P4gDialog.Builder(this)
                 .setTitle(t("Botões visíveis", "Visible buttons"))
                 .setMultiChoiceItems(labels, shown, (d, which, checked) -> shown[which] = checked)
                 .setPositiveButton(t("Aplicar", "Apply"), (d, which) -> {
@@ -200,14 +198,12 @@ public class ControlsEditor extends Activity {
                     view.invalidate();
                 })
                 .setNegativeButton(t("Cancelar", "Cancel"), null)
-                .setNeutralButton(t("Mostrar todos", "Show all"), null)
+                .setNeutralButton(t("Mostrar todos", "Show all"), (d, which) -> {
+                    for (int k = 0; k < indices.length; k++) hidden[indices[k]] = false;
+                    view.group = -1;
+                    view.invalidate();
+                })
                 .create();
-        dialog.setOnShowListener(d -> dialog.getButton(DialogInterface.BUTTON_NEUTRAL).setOnClickListener(v -> {
-            for (int k = 0; k < shown.length; k++) {
-                shown[k] = true;
-                dialog.getListView().setItemChecked(k, true);
-            }
-        }));
         dialog.setOnDismissListener(d -> hideSystemBars());
         dialog.show();
     }
