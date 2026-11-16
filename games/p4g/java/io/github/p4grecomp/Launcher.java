@@ -430,7 +430,7 @@ public class Launcher extends Activity {
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView version = new TextView(this);
-        version.setText("BETA  ·  0.5.0");
+        version.setText("BETA  ·  0.5.1");
         version.setTextColor(P4gTheme.MUTED);
         version.setTextSize(12);
         version.setTypeface(Typeface.DEFAULT_BOLD);
