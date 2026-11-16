@@ -169,6 +169,10 @@ The workflow builds the native runtime and preparation libraries, compiles the J
 
 This project builds on the compatibility runtime and native port work of its original contributors. Preserve the existing copyright notices and attribution when redistributing source code.
 
+### Contributors
+
+- [OpenAI ChatGPT](https://chatgpt.com/) — development assistance and code contributions.
+
 The repository's source-code license is available in [LICENSE](LICENSE). Third-party components retain their respective licenses. Game content, character artwork and trademarks are not covered by the source-code license.
 
 Persona 4 Golden and related trademarks belong to their respective rights holders, including ATLUS and SEGA. The launcher uses a custom typographic icon.
