@@ -25,6 +25,7 @@ final class P4gDialog extends Dialog {
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setCancelable(spec.cancelable);
         setCanceledOnTouchOutside(spec.cancelable);
+        if (spec.cancelClick != null) setOnCancelListener(spec.cancelClick);
 
         LinearLayout card = new LinearLayout(context);
         card.setOrientation(LinearLayout.VERTICAL);
@@ -162,6 +163,7 @@ final class P4gDialog extends Dialog {
         CharSequence title, message, positive, negative, neutral;
         DialogInterface.OnClickListener positiveClick, negativeClick, neutralClick, itemClick;
         DialogInterface.OnMultiChoiceClickListener multiClick;
+        DialogInterface.OnCancelListener cancelClick;
         CharSequence[] items;
         boolean[] multiChecked;
         int singleChecked = -1;
@@ -173,6 +175,9 @@ final class P4gDialog extends Dialog {
         Builder setMessage(CharSequence value) { message = value; return this; }
         Builder setView(View value) { view = value; return this; }
         Builder setCancelable(boolean value) { cancelable = value; return this; }
+        Builder setOnCancelListener(DialogInterface.OnCancelListener listener) {
+            cancelClick = listener; return this;
+        }
         Builder setPositiveButton(CharSequence label, DialogInterface.OnClickListener listener) {
             positive = label; positiveClick = listener; return this;
         }
