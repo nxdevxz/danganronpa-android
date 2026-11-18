@@ -344,6 +344,16 @@ void window_size(uint32_t& w, uint32_t& h) {
     if (r.empty()) r = setting("RESOLUTION");
     unsigned cw = 0, ch = 0;
     if (!r.empty() && std::sscanf(r.c_str(), "%ux%u", &cw, &ch) == 2 && cw && ch) {
+        // Once the game starts, Hor+ uses the same output size for the window,
+        // the guest display service and NVN, including the swapchain fallback.
+        const char* format = std::getenv("NX_STRETCH");
+        if (format && std::strcmp(format, "hor+") == 0 &&
+            sw && sh && uint64_t(sw) * 9 > uint64_t(sh) * 16) {
+            const auto wide = android_surface_size(sw, sh, cw, ch);
+            w = wide.width;
+            h = wide.height;
+            return;
+        }
         w = cw;
         h = ch;
         return;
@@ -890,11 +900,6 @@ extern "C" void android_main(android_app* app) {
                 setenv(key.c_str(), value.c_str(), key == "NX_STRETCH" ? 1 : 0);
             }
         }
-        const char* format = getenv("NX_STRETCH");
-        if (format && std::strcmp(format, "hor+") == 0) {
-            setenv("NX_ULTRAWIDE", "display", 1);
-            setenv("NX_UW_CAMERA", "0", 1);
-        }
         // NX_HANDHELD=0 in config.txt (the launcher's TV mode): docked, 1080p. svc_am.cpp tests only whether the variable
         // exists, so "0" must remove it.
         if (const char* h = getenv("NX_HANDHELD"); h && h[0] == '0')
@@ -939,6 +944,20 @@ extern "C" void android_main(android_app* app) {
         }
         if (!started && g_window) {
             started = true;
+            const char* format = std::getenv("NX_STRETCH");
+            if (format && std::strcmp(format, "hor+") == 0) {
+                // Measure before Vulkan resizes the native buffers. The launcher
+                // stores a 16:9 resolution preset even when Hor+ is selected.
+                uint32_t w = 0, h = 0;
+                window_size(w, h);
+                if (w && h) {
+                    const std::string size = std::to_string(w) + "x" + std::to_string(h);
+                    setenv("NX_RENDER_RES", size.c_str(), 1);
+                    setenv("NX_ULTRAWIDE", size.c_str(), 1);
+                    setenv("NX_UW_CAMERA", "0", 1);
+                    nx::log("p4g: Hor+ guest display and NVN output %s", size.c_str());
+                }
+            }
             start_thread(game_thread, nullptr, 256ull << 20);  // the guest main thread; deep host recursion
         }
         if (started) sleep_ns(2'000'000);
