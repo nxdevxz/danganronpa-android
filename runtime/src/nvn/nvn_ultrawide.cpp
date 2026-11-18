@@ -37,7 +37,8 @@ float init_factor() {
         aspect = double(w) / h;
     } else {  // "1" / "auto": the window's shape
         uint32_t ww = 0, wh = 0;
-        plat::window_size(ww, wh);
+        if (std::strcmp(e, "display") == 0) plat::screen_size(ww, wh);
+        else plat::window_size(ww, wh);
         if (wh) aspect = double(ww) / wh;
     }
     float k = float(aspect / k169);
