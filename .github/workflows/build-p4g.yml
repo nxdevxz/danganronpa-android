@@ -4,7 +4,7 @@ name: P4G Beta
 on:
   workflow_dispatch:
   push:
-    branches: [main, perf/chakeyy-nvn-p4g]
+    branches: [perf/chakeyy-nvn-p4g]
 
 permissions:
   contents: read
