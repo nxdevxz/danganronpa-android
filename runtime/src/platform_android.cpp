@@ -32,7 +32,6 @@
 #include <deque>
 #include <filesystem>
 #include <fstream>
-#include "config_env.h"
 #include <mutex>
 #include <string>
 #include <vector>
@@ -51,7 +50,6 @@
 #include "platform.h"
 #include "platform_android.h"
 #include "android_surface_size.h"
-#include "frame_history.h"
 #if NX_NCE
 #include "nce/nce.h"
 #endif
@@ -781,13 +779,6 @@ void request_immersive() {
 // Frames presented so far, for the launcher's FPS counter (GameActivity.nativeFrames, in the game's own process).
 // RegisterNatives below also keeps this callable when hidden visibility and section GC discard name lookup.
 static jlong native_frames(JNIEnv*, jclass) { return jlong(nx::g_frame.load()); }
-static jfloatArray native_frame_times(JNIEnv* env, jclass) {
-    float samples[nx::FrameHistory::capacity];
-    const auto count = jsize(nx::g_frame_history.snapshot(samples));
-    jfloatArray result = env->NewFloatArray(count);
-    if (result && count) env->SetFloatArrayRegion(result, 0, count, samples);
-    return result;
-}
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_belmantegu_wonderrecomp_GameActivity_nativeFrames(JNIEnv*, jclass) {
     return native_frames(nullptr, nullptr);
 }
@@ -803,13 +794,6 @@ extern "C" JNIEXPORT void ANativeActivity_onCreate(ANativeActivity* activity, vo
     if (activity->env->RegisterNatives(activity_class, &frames_method, 1) != JNI_OK &&
         activity->env->ExceptionCheck())
         activity->env->ExceptionClear();
-    // Other games sharing the runtime need not implement this optional overlay API.
-    if (activity->env->GetStaticMethodID(activity_class, "nativeFrameTimes", "()[F")) {
-        JNINativeMethod method{const_cast<char*>("nativeFrameTimes"), const_cast<char*>("()[F"),
-                               reinterpret_cast<void*>(native_frame_times)};
-        activity->env->RegisterNatives(activity_class, &method, 1);
-    }
-    if (activity->env->ExceptionCheck()) activity->env->ExceptionClear();
     activity->env->DeleteLocalRef(activity_class);
     if (g_ui_pipe[0] < 0 && pipe2(g_ui_pipe, O_NONBLOCK | O_CLOEXEC) == 0)
         ALooper_addFd(ALooper_forThread(), g_ui_pipe[0], ALOOPER_POLL_CALLBACK, ALOOPER_EVENT_INPUT, on_ui_request, nullptr);
@@ -890,24 +874,25 @@ extern "C" void android_main(android_app* app) {
     const char* installed = std::getenv("NX_P4G_INSTALLED");
     const bool p4g_installed = std::strcmp(nx::game::kInfo.id, "p4g") == 0 && installed && installed[0] == '1';
     // The installed payload can live in Android/data while this chosen root still holds saves, mods and config.
-    g_root = !chosen.empty() && (has_data(chosen) || p4g_installed) ? chosen : has_data(own) ? own : shared;
-    // config.txt's NX_* lines become environment variables (the NVN layer reads its switches with getenv), replacing
-    // stale values from a previous launch. Android defaults: handheld (720p, the lighter GPU load).
+    g_root = !chosen.empty() && (has_data(chosen) || p4g_installed || std::getenv("NX_GAME_FD")) ? chosen : has_data(own) ? own : shared;
+    // config.txt's NX_* lines become environment variables (the NVN layer reads its switches with getenv), without
+    // overriding a variable already set. Android defaults: handheld (720p, the lighter GPU load).
     {
         std::ifstream f(g_root + "/config.txt");
-        load_config_environment(f, [](const std::string& key, const std::string& value) {
-            // Config is authoritative on each launch; repeated keys use the final value.
-            setenv(key.c_str(), value.c_str(), 1);
-        });
-        for (const char* key : {"NX_SET_CACHE", "NX_MAX_ANISO", "NX_MALI_SPIRV_OPT", "NX_BUFFER_CACHE",
-                                "NX_CLEARS_V2", "NX_IMAGE_STORAGE", "NX_EXP_NO_WB"}) {
-            const char* value = getenv(key);
-            nx::log("config: %s=%s", key, value ? value : "<default>");
+        std::string line;
+        while (std::getline(f, line)) {
+            while (!line.empty() && (line.back() == '\r' || line.back() == ' ')) line.pop_back();
+            auto eq = line.find('=');
+            if (line.rfind("NX_", 0) == 0 && eq != std::string::npos) {
+                const std::string key = line.substr(0, eq);
+                const std::string value = line.substr(eq + 1);
+                // Launcher and NativeActivity share a process: update stretch even if a previous launch set it to "1".
+                setenv(key.c_str(), value.c_str(), key == "NX_STRETCH" ? 1 : 0);
+            }
         }
-        const char* screen_format = std::getenv("NX_STRETCH");
-        if (screen_format && std::strcmp(screen_format, "hor+") == 0) {
+        const char* format = getenv("NX_STRETCH");
+        if (format && std::strcmp(format, "hor+") == 0) {
             setenv("NX_ULTRAWIDE", "display", 1);
-            // P4G uses clip-space correction. The legacy camera scan targets Wonder.
             setenv("NX_UW_CAMERA", "0", 1);
         }
         // NX_HANDHELD=0 in config.txt (the launcher's TV mode): docked, 1080p. svc_am.cpp tests only whether the variable

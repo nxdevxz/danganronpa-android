@@ -39,7 +39,7 @@ struct OwnedFd {
     ~OwnedFd() { if (value >= 0) close(value); }
 };
 int run(int fd, const std::string& name, int update_fd, const std::string& update_name,
-        const std::string& keys, const std::string& title_keys, const std::string& data_dir) {
+        const std::string& keys, const std::string& title_keys, const std::string& data_dir, bool direct) {
     std::unique_lock guard(run_lock, std::try_to_lock);
     if (!guard.owns_lock()) return 1;
     phase = 1; done = 0; total = 0; set_message("");
@@ -65,6 +65,7 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         if (!game->exefs().count("main")) return fail("The game has no main executable");
         if (!nx::nvn::local::available(error)) return fail(error);
 
+        if (direct) return game->exefs().count("sdk") ? 0 : fail("Missing sdk module");
         fs::create_directories(root);
         // The caller provides a private staging directory. Extract with the existing checked,
         // streaming importer; no game image or keys are required by the installed runtime.
@@ -172,9 +173,9 @@ JNIEXPORT jlongArray JNICALL Java_io_github_p4grecomp_Importer_bytes(JNIEnv* env
     return out;
 }
 JNIEXPORT jint JNICALL Java_io_github_p4grecomp_Importer_run(JNIEnv* env, jclass, jint fd, jstring name,
-        jint update_fd, jstring update_name, jstring keys, jstring title_keys, jstring data_dir, jstring, jint) {
+        jint update_fd, jstring update_name, jstring keys, jstring title_keys, jstring data_dir, jstring, jint, jboolean direct) {
     return run(fd, jstr(env, name), update_fd, jstr(env, update_name), jstr(env, keys),
-            jstr(env, title_keys), jstr(env, data_dir));
+            jstr(env, title_keys), jstr(env, data_dir), direct);
 }
 JNIEXPORT jintArray JNICALL Java_io_github_p4grecomp_Importer_progress(JNIEnv* env, jclass) {
     jint values[] = {phase.load(), done.load(), total.load()};

@@ -122,6 +122,7 @@ public class ImportActivity extends Activity {
         try { data = Launcher.installationDir(this); }
         catch (Exception e) { fail(String.valueOf(e.getMessage())); return; }
 
+        final boolean direct = getIntent().getBooleanExtra("direct_mode", false);
         final File work =
             new File(getCacheDir(), "import");
 
@@ -133,7 +134,7 @@ public class ImportActivity extends Activity {
         Importer.reset();
 
 
-        status.setText(updateUri == null
+        status.setText(direct ? t("Verificando o jogo…", "Verifying game…") : updateUri == null
                 ? "Installing base game data... Keep this screen open and allow enough free space."
                 : "Applying the game update over the base game... Keep this screen open and allow enough free space.");
 
@@ -156,7 +157,8 @@ public class ImportActivity extends Activity {
                             "Could not open the NSP/XCI"
                         );
                     }
-                    staged = InstalledGameFiles.begin(data);
+                    if (updateUri != null && updatePfd == null) throw new IOException("Could not open the update NSP");
+                    if (!direct) staged = InstalledGameFiles.begin(data);
 
                     int jobs = Math.max(
                         2,
@@ -173,14 +175,14 @@ public class ImportActivity extends Activity {
                         titleKeys.exists()
                             ? titleKeys.getPath()
                             : "",
-                        staged.getPath(),
+                        (direct ? data : staged).getPath(),
                         work.getPath(),
-                        jobs
+                        jobs, direct
                     );
 
                     if (rc != 0) {
                         error = Importer.error();
-                    } else {
+                    } else if (!direct) {
                         InstalledGameFiles.finish(staged);
                         synchronized (commitLock) {
                             if (cancelRequested) throw new IOException("Preparation cancelled");
@@ -217,8 +219,8 @@ public class ImportActivity extends Activity {
                         if (cancelRequested) { setResult(RESULT_CANCELED); finish(); return; }
                         if (result == 0) {
                             bar.setProgress(1000);
-                            String complete = updateUri == null ? "Game installed." : "Game update installed.";
-                            status.setText(complete + " The NSP/XCI files are no longer required to play.");
+                            String complete = direct ? t("Jogo pronto para abrir pelo arquivo.", "Game ready to run from file.") : updateUri == null ? "Game installed." : "Game update installed.";
+                            status.setText(direct ? complete : complete + " The NSP/XCI files are no longer required to play.");
                             Toast.makeText(ImportActivity.this, complete, Toast.LENGTH_LONG).show();
                             setResult(RESULT_OK);
                             finish();

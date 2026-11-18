@@ -1,7 +1,6 @@
 package io.github.p4grecomp;
 
 import android.app.Activity;
-import android.app.AlertDialog;
 import android.content.ClipData;
 import android.content.Context;
 import android.content.DialogInterface;
@@ -21,8 +20,10 @@ import android.system.Os;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.View;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.widget.Button;
+import android.widget.CheckBox;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -48,6 +49,7 @@ import java.util.Map;
 /** Routes to preparation or the main menu after checking the actual files. */
 public class Launcher extends Activity {
     static final String DATA = "Persona 4 Golden";
+    static final boolean DEFAULT_LANDSCAPE = true;
 
     static final class Option {
         final String key, pt, en;
@@ -96,6 +98,12 @@ public class Launcher extends Activity {
         static boolean isExternalStorageManager() {
             return Environment.isExternalStorageManager();
         }
+
+        static int[] safeArea(WindowInsets insets) {
+            android.graphics.Insets safe = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            return new int[] {safe.left, safe.top, safe.right, safe.bottom};
+        }
     }
 
     boolean hasAccess() {
@@ -138,7 +146,20 @@ public class Launcher extends Activity {
         }
     }
 
+    boolean directMode() { return prefs().getBoolean("direct_mode", false); }
+
+    void addStorageMode(LinearLayout layout) {
+        addRow(layout, t("Modo de preparação", "Setup mode"),
+                directMode() ? t("Rodar pelo NSP/XCI", "Run from NSP/XCI") :
+                        t("Instalar em Android/data", "Install in Android/data"), v -> {
+                    prefs().edit().putBoolean("direct_mode", !directMode()).apply();
+                    refresh();
+                });
+    }
+
     boolean prepared() throws IOException {
+        if (directMode()) return gameUri() != null && gameUri().equals(prefs().getString("direct_ready", ""))
+                && hasKeys() && gameReadable() && updateReadable();
         File installed = installationDir(this);
         InstalledGameFiles.migrate(dataDir(), installed);
         return InstalledGameFiles.ready(installed);
@@ -175,7 +196,7 @@ public class Launcher extends Activity {
         } catch (Exception ignored) {  // a provider without persistable grants: works while the app runs
         }
         prefs().edit().putString("uri", uri.toString()).putString("name", name)
-                .remove("p4g_prepared_uri").apply();
+                .remove("p4g_prepared_uri").remove("direct_ready").apply();
     }
 
     void onUpdatePicked(Uri uri) {
@@ -191,7 +212,7 @@ public class Launcher extends Activity {
             getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
         } catch (Exception ignored) {
         }
-        prefs().edit().putString("update_uri", uri.toString()).putString("update_name", name).apply();
+        prefs().edit().putString("update_uri", uri.toString()).putString("update_name", name).remove("direct_ready").apply();
     }
 
     // prod.keys (and title.keys, when the dump needs it): copied into the app's own storage, never shared or logged.
@@ -232,6 +253,7 @@ public class Launcher extends Activity {
         i.putExtra(ImportActivity.EXTRA_NAME, gameName());
         i.putExtra(ImportActivity.EXTRA_UPDATE_URI, updateUri());
         i.putExtra(ImportActivity.EXTRA_UPDATE_NAME, updateName());
+        i.putExtra("direct_mode", directMode());
         startActivityForResult(i, PREPARE);
     }
 
@@ -246,11 +268,12 @@ public class Launcher extends Activity {
         Lang.load(this);
         applyLauncherOrientation();
         P4gTheme.apply(this);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
-                new String[] {"360p", "480p", "720p", "1080p"},
-                new String[] {"360p", "480p", "720p", "1080p"},
-                new String[] {"360p", "480p", "720p", "1080p"}, 2));
+                new String[] {"480p", "720p", "1080p"},
+                new String[] {"480p", "720p", "1080p"},
+                new String[] {"480p", "720p", "1080p"}, 1));
         options.add(new Option("NX_STRETCH", "Formato da tela", "Screen format",
                 new String[] {"0", "16:10", "1", "hor+"},
                 new String[] {"16:9", "16:10", "Esticar", "Widescreen (Hor+)"},
@@ -258,15 +281,22 @@ public class Launcher extends Activity {
         options.add(new Option("NX_FPS_CAP", "Limite de FPS", "FPS limit", new String[] {"30", "45", "60"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"}, 0));
-        options.add(new Option("NX_SHOW_FPS", "Contador de FPS", "FPS counter", new String[] {"0", "1"},
+        options.add(new Option("NX_MAX_ANISO", "Filtragem anisotrópica", "Anisotropic filtering",
+                new String[] {"1", "2", "4", "8", "16"},
+                new String[] {"Desativada (mais desempenho)", "2x (rápido)", "4x (padrão)",
+                        "8x (mais qualidade)", "16x (qualidade máxima)"},
+                new String[] {"Off (best performance)", "2x (faster)", "4x (default)",
+                        "8x (higher quality)", "16x (best quality)"}, 2));
+        options.add(new Option("NX_OVERLAY_SIZE", "Tamanho do overlay", "Overlay size",
+                new String[] {"50", "80", "100", "125", "150"},
+                new String[] {"50%", "80%", "100% (padrão)", "125%", "150%"},
+                new String[] {"50%", "80%", "100% (default)", "125%", "150%"}, 2));
+        options.add(new Option("NX_SHOW_FPS", "FPS", "FPS", new String[] {"0", "1"},
                 new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
         for (String metric : new String[] {"CPU", "GPU", "RAM"}) {
             options.add(new Option("NX_OVERLAY_" + metric, metric, metric, new String[] {"0", "1"},
                     new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
         }
-        options.add(new Option("NX_OVERLAY_FRAME_TIME", "Gráfico de tempo por quadro", "Frame time graph",
-                new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
-                new String[] {"Off", "On"}, 0));
         options.add(new Option("NX_TRACE_PERF", "Estatísticas detalhadas de desempenho", "Detailed performance logging",
                 new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
                 new String[] {"Off", "On"}, 0));
@@ -339,8 +369,13 @@ public class Launcher extends Activity {
     }
 
     boolean readyForPlay;
+    boolean launcherLandscape() {
+        return getSharedPreferences("launcher", MODE_PRIVATE)
+                .getBoolean("landscape", DEFAULT_LANDSCAPE);
+    }
+
     void applyLauncherOrientation() {
-        boolean landscape = getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false);
+        boolean landscape = launcherLandscape();
         setRequestedOrientation(landscape ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
                 : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
     }
@@ -359,24 +394,26 @@ public class Launcher extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
         background.setColor(P4gTheme.PANEL);
-        background.setCornerRadius(dp(18));
+        background.setCornerRadius(dp(14));
         card.setBackground(background);
         LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
-        spacing.bottomMargin = dp(12);
+        spacing.bottomMargin = dp(8);
         root.addView(card, spacing);
         Button header = new Button(this);
         P4gTheme.button(header, false);
+        compactButton(header);
         header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        header.setTextSize(16);
+        header.setTextSize(15);
         card.addView(header, new LinearLayout.LayoutParams(-1, -2));
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(12), dp(8), dp(12), dp(12));
+        body.setPadding(dp(10), dp(4), dp(10), dp(8));
         TextView hint = new TextView(this);
         hint.setText(subtitle);
         hint.setTextColor(P4gTheme.MUTED);
-        hint.setTextSize(13);
-        hint.setPadding(0, 0, 0, dp(8));
+        hint.setTextSize(12);
+        hint.setPadding(0, 0, 0, dp(4));
+        hint.setVisibility(subtitle.isEmpty() ? View.GONE : View.VISIBLE);
         body.addView(hint);
         card.addView(body, new LinearLayout.LayoutParams(-1, -2));
         // Preserve expansion across refreshes and Activity recreation during this visit.
@@ -397,59 +434,58 @@ public class Launcher extends Activity {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(P4gTheme.BACKGROUND);
-        int pad = dp(20);
-        root.setPadding(pad, pad, pad, pad);
+        root.setPadding(dp(18), dp(10), dp(18), dp(14));
 
         TextView title = new TextView(this);
         title.setText("Persona 4 Golden");
         title.setTextColor(P4gTheme.YELLOW);
-        title.setPadding(0, dp(20), 0, dp(4));
-        title.setTextSize(28);
+        title.setPadding(0, dp(4), 0, dp(2));
+        title.setTextSize(25);
         title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView version = new TextView(this);
-        version.setText("BETA  ·  0.5.0");
+        version.setText("BETA  ·  0.5.1");
         version.setTextColor(P4gTheme.MUTED);
-        version.setTextSize(13);
+        version.setTextSize(12);
         version.setTypeface(Typeface.DEFAULT_BOLD);
-        version.setPadding(0, dp(10), 0, 0);
+        version.setPadding(0, dp(3), 0, 0);
         root.addView(version);
 
         status = new TextView(this);
         status.setTextColor(P4gTheme.MUTED);
-        status.setTextSize(14);
-        status.setPadding(0, dp(6), 0, dp(14));
+        status.setTextSize(13);
+        status.setPadding(0, dp(4), 0, dp(8));
         root.addView(status);
 
         LinearLayout launcherSettings = settingsGroup(root, "launcher", t("Configurações do launcher", "Launcher settings"),
                 t("Idioma e orientação", "Language and orientation"), false);
         addRow(launcherSettings, t("Idioma do launcher", "Launcher language"),
-                Lang.isPortuguese() ? "Português" : "English", v -> {
-                    Lang.toggle(this);
-                    build(readyForPlay);
-                    refresh();
-                });
+                Lang.currentName(), v -> showLanguagePicker());
 
-        addRow(launcherSettings, t("Restaurar idioma e orientação", "Reset language and orientation"),
-                t("Restaurar", "Reset"), v -> new AlertDialog.Builder(this)
-                        .setMessage(t("Usar o idioma do sistema e orientação vertical?", "Use the system language and portrait orientation?"))
+        addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
+                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", DEFAULT_LANDSCAPE)
+                        ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
+                    SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
+                    settings.edit().putBoolean("landscape",
+                            !settings.getBoolean("landscape", DEFAULT_LANDSCAPE)).apply();
+                    applyLauncherOrientation();
+                });
+        addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
+                t("Redefinir", "Reset"), v -> new P4gDialog.Builder(this)
+                        .setMessage(t("Redefinir o idioma e a orientação do launcher?",
+                                "Reset the launcher language and orientation?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
-                        .setPositiveButton(t("Restaurar", "Reset"), (dialog, which) -> {
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
                             getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
                             Lang.load(this);
                             applyLauncherOrientation();
+                            build(readyForPlay);
                             refresh();
                         }).show());
-        addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
-                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", false)
-                        ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
-                    SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
-                    settings.edit().putBoolean("landscape", !settings.getBoolean("landscape", false)).apply();
-                    applyLauncherOrientation();
-                });
 
         if (!ready) {
         P4gTheme.section(root, t("Preparação do jogo", "Game setup"));
+        addStorageMode(root);
         addRow(root, t("Arquivo do jogo (.nsp / .xci)", "Game file (.nsp / .xci)"), t("Escolher", "Choose"),
                 new View.OnClickListener() {
                     @Override
@@ -471,8 +507,8 @@ public class Launcher extends Activity {
         P4gTheme.button(play, true);
         play.setAllCaps(false);
         play.setText(t("Preparar jogo", "Prepare"));
-        play.setTextSize(20);
-        root.addView(play, new LinearLayout.LayoutParams(-1, dp(64)));
+        play.setTextSize(18);
+        root.addView(play, new LinearLayout.LayoutParams(-1, dp(54)));
         play.setOnClickListener(v -> {
             if (!hasAccess()) askAccess();
             else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
@@ -484,16 +520,30 @@ public class Launcher extends Activity {
         setup.setFillViewport(true);
         setup.addView(root);
         setContentView(setup);
+        applySafeAreaInsets(setup);
         return;
         }
 
         play = new Button(this);
-        play.setTextSize(20);
+        play.setTextSize(18);
         P4gTheme.button(play, true);
         play.setText(t("Jogar", "Play"));
-        LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(64));
-        playLayout.bottomMargin = dp(14);
+        LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(54));
+        playLayout.leftMargin = dp(18);
+        playLayout.rightMargin = dp(18);
+        playLayout.bottomMargin = dp(10);
         play.setOnClickListener(v -> installShadersAndPlay());
+
+        LinearLayout presets = settingsGroup(root, "presets",
+                t("Predefinições de configuração", "Configuration presets"),
+                t("Escolha entre desempenho, equilíbrio e qualidade de imagem.",
+                        "Choose between frame rate, balance and image quality."), true);
+        addRow(presets, t("Desempenho", "Performance"), t("Aplicar", "Apply"),
+                v -> applyPreset("performance"));
+        addRow(presets, t("Normal", "Normal"), t("Aplicar", "Apply"),
+                v -> applyPreset("normal"));
+        addRow(presets, t("Qualidade", "Quality"), t("Aplicar", "Apply"),
+                v -> applyPreset("quality"));
 
         LinearLayout quick = settingsGroup(root, "quick", t("Ajustes rápidos", "Quick settings"),
                 t("Tela, desempenho e controles", "Display, performance and controls"), true);
@@ -516,8 +566,9 @@ public class Launcher extends Activity {
                 t("Diagnóstico e comunidade", "Diagnostics and community"), false);
 
         P4gTheme.section(content, t("Atualização do jogo", "Game update"));
+        addStorageMode(content);
         TextView updateHelp = new TextView(this);
-        updateHelp.setText(t(
+        updateHelp.setText(directMode() ? t("Mantenha o jogo base e o update acessíveis para jogar.", "Keep the base game and update accessible to play.") : t(
                 "Para aplicar o update, selecione novamente o NSP/XCI original e o update NSP. A atualização depende de blocos do jogo base. Depois da preparação, os arquivos NSP não serão necessários para jogar.",
                 "To apply an update, select the original NSP/XCI again and the update NSP. A Switch update depends on blocks from the base game and cannot use only the already extracted files. Neither NSP is needed to play after preparation finishes."));
         updateHelp.setTextColor(Color.LTGRAY);
@@ -553,20 +604,39 @@ public class Launcher extends Activity {
         addRow(support, t("Reportar um problema", "Report an issue"), t("Abrir", "Open"),
                 v -> openExternal("https://github.com/nxdevxz/p4g-android/issues/new/choose"));
         for (final Option o : options) {
+            String group = optionGroup(o.key);
+            if (isOverlayToggle(o.key)) {
+                CheckBox toggle = new CheckBox(this);
+                toggle.setText(t(o.pt, o.en));
+                toggle.setTextColor(P4gTheme.TEXT);
+                toggle.setTextSize(16);
+                toggle.setMinHeight(dp(44));
+                toggle.setPadding(dp(4), 0, dp(4), 0);
+                toggle.setButtonTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+                toggle.setChecked("1".equals(o.values[o.pick]));
+                toggle.setTag(o);
+                toggle.setOnClickListener(v -> {
+                    o.pick = ((CheckBox) v).isChecked() ? 1 : 0;
+                    save();
+                });
+                overlay.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
+                continue;
+            }
             LinearLayout row = new LinearLayout(this);
             row.setOrientation(LinearLayout.HORIZONTAL);
             row.setGravity(Gravity.CENTER_VERTICAL);
-            row.setPadding(0, dp(4), 0, dp(4));
+            row.setPadding(0, dp(2), 0, dp(2));
             TextView name = new TextView(this);
             name.setText(t(o.pt, o.en));
             name.setTextColor(Color.WHITE);
-            name.setTextSize(17);
+            name.setTextSize(16);
             row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
             final Button value = new Button(this);
             P4gTheme.button(value, false);
+            compactButton(value);
             value.setAllCaps(false);
-            value.setMinWidth(dp(120));
-            value.setMaxWidth(dp(170));
+            value.setMinWidth(dp(110));
+            value.setMaxWidth(dp(160));
             row.addView(value);
             value.setOnClickListener(new View.OnClickListener() {
                 @Override
@@ -577,31 +647,26 @@ public class Launcher extends Activity {
                 }
             });
             value.setTag(o);
-            String group = optionGroup(o.key);
             (group.equals("quick") ? quick : group.equals("logs") ? diagnostics :
                     group.equals("overlay") ? overlay : group.equals("controls") ? controls : graphics).addView(row);
         }
-        addResetRow(quick, "quick");
-        addResetRow(graphics, "graphics");
-        addResetRow(controls, "controls");
-        addResetRow(overlay, "overlay");
-        addResetRow(diagnostics, "logs");
         addDriverRow(graphics);
         addLogsRow(diagnostics);
 
         LinearLayout edit = new LinearLayout(this);
         edit.setOrientation(LinearLayout.HORIZONTAL);
         edit.setGravity(Gravity.CENTER_VERTICAL);
-        edit.setPadding(0, dp(4), 0, dp(4));
+        edit.setPadding(0, dp(2), 0, dp(2));
         TextView editName = new TextView(this);
         editName.setText(t("Posição dos controles", "Controls position"));
         editName.setTextColor(Color.WHITE);
-        editName.setTextSize(17);
+        editName.setTextSize(16);
         edit.addView(editName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button editButton = new Button(this);
         P4gTheme.button(editButton, false);
+        compactButton(editButton);
         editButton.setAllCaps(false);
-        editButton.setMinWidth(dp(120));
+        editButton.setMinWidth(dp(110));
         editButton.setText(t("Editar layout", "Edit layout"));
         edit.addView(editButton);
         editButton.setOnClickListener(new View.OnClickListener() {
@@ -617,24 +682,33 @@ public class Launcher extends Activity {
         });
         controls.addView(edit);
 
+        // Keep the reset action as the final item in every settings section.
+        addResetRow(quick, "quick");
+        addResetRow(graphics, "graphics");
+        addResetRow(controls, "controls");
+        addResetRow(overlay, "overlay");
+        addResetRow(diagnostics, "logs");
+
         // Saves: in from a ZIP or a folder (a Switch backup or another player's), out to a ZIP in Download.
         LinearLayout saves = new LinearLayout(this);
         saves.setOrientation(LinearLayout.HORIZONTAL);
         saves.setGravity(Gravity.CENTER_VERTICAL);
-        saves.setPadding(0, dp(4), 0, dp(4));
+        saves.setPadding(0, dp(2), 0, dp(2));
         TextView savesName = new TextView(this);
         savesName.setText(t("Saves", "Saves"));
         savesName.setTextColor(Color.WHITE);
-        savesName.setTextSize(17);
+        savesName.setTextSize(16);
         saves.addView(savesName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button importButton = new Button(this);
         P4gTheme.button(importButton, false);
+        compactButton(importButton);
         importButton.setAllCaps(false);
         importButton.setMinWidth(dp(88));
         importButton.setText(t("Importar", "Import"));
         saves.addView(importButton);
         Button exportButton = new Button(this);
         P4gTheme.button(exportButton, false);
+        compactButton(exportButton);
         exportButton.setAllCaps(false);
         exportButton.setMinWidth(dp(88));
         exportButton.setText(t("Exportar", "Export"));
@@ -665,16 +739,17 @@ public class Launcher extends Activity {
         LinearLayout transRow = new LinearLayout(this);
         transRow.setOrientation(LinearLayout.HORIZONTAL);
         transRow.setGravity(Gravity.CENTER_VERTICAL);
-        transRow.setPadding(0, dp(4), 0, dp(4));
+        transRow.setPadding(0, dp(2), 0, dp(2));
         TextView transName = new TextView(this);
         transName.setText(t("Tradução / Mod CPK", "Translation / CPK mod"));
         transName.setTextColor(Color.WHITE);
-        transName.setTextSize(17);
+        transName.setTextSize(16);
         transRow.addView(transName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button transButton = new Button(this);
         P4gTheme.button(transButton, false);
+        compactButton(transButton);
         transButton.setAllCaps(false);
-        transButton.setMinWidth(dp(120));
+        transButton.setMinWidth(dp(110));
         transButton.setText(t("Importar CPK", "Import CPK"));
         transRow.addView(transButton);
         transButton.setOnClickListener(new View.OnClickListener() {
@@ -690,40 +765,83 @@ public class Launcher extends Activity {
         content.addView(transRow);
         addModsRow(content);
 
-        root.addView(play, playLayout);
         ScrollView scroll = new ScrollView(this);
         scroll.setBackgroundColor(P4gTheme.BACKGROUND);
         scroll.setFillViewport(true);
         scroll.addView(root);
-        setContentView(scroll);
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(P4gTheme.BACKGROUND);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        screen.addView(play, playLayout);
+        setContentView(screen);
+        applySafeAreaInsets(screen);
     }
 
     boolean installingShaders;
 
     static String optionGroup(String key) {
-        if (key.equals("RESOLUTION") || key.equals("NX_STRETCH") || key.equals("NX_FPS_CAP") || key.equals("NX_TOUCH_SHOW")) return "quick";
+        if (key.equals("RESOLUTION") || key.equals("NX_STRETCH") || key.equals("NX_FPS_CAP") ||
+                key.equals("NX_MAX_ANISO")) return "quick";
         if (key.equals("NX_TRACE_PERF")) return "logs";
         if (key.equals("NX_SHOW_FPS") || key.startsWith("NX_OVERLAY_")) return "overlay";
         if (key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
         return "graphics";
     }
 
+    static boolean isOverlayToggle(String key) {
+        return key.equals("NX_SHOW_FPS") || key.equals("NX_OVERLAY_CPU") ||
+                key.equals("NX_OVERLAY_GPU") || key.equals("NX_OVERLAY_RAM");
+    }
+
+    static String[] presetValues(String preset) {
+        if ("performance".equals(preset)) return new String[] {"480p", "60", "1", "light", "0"};
+        if ("quality".equals(preset)) return new String[] {"1080p", "30", "16", "standard", "-0.5"};
+        return new String[] {"720p", "30", "4", "standard", "0"};
+    }
+
+    private void applyPreset(String preset) {
+        String[] keys = {"RESOLUTION", "NX_FPS_CAP", "NX_MAX_ANISO", "NX_PIPE_PREWARM_LOAD", "NX_LOD_BIAS"};
+        String[] values = presetValues(preset);
+        for (Option option : options)
+            for (int i = 0; i < keys.length; i++)
+                if (keys[i].equals(option.key)) option.select(values[i]);
+        if (save()) {
+            updateButtons(getWindow().getDecorView());
+            Toast.makeText(this, t("Predefinição aplicada", "Preset applied"), Toast.LENGTH_SHORT).show();
+        }
+    }
+
     private void addResetRow(LinearLayout parent, String group) {
-        addRow(parent, t("Opções desta seção", "Options in this section"), t("Restaurar", "Reset"),
-                v -> new AlertDialog.Builder(this)
-                        .setMessage(t("Restaurar as opções desta seção ao padrão?", "Reset this section's options to defaults?"))
+        addRow(parent, t("Redefinir configurações", "Reset settings"), t("Redefinir", "Reset"),
+                v -> new P4gDialog.Builder(this)
+                        .setMessage(t("Redefinir as configurações desta seção para o padrão?",
+                                "Reset this section's settings to defaults?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
-                        .setPositiveButton(t("Restaurar", "Reset"), (dialog, which) -> {
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
                             for (Option o : options) if (optionGroup(o.key).equals(group)) o.pick = o.defaultPick;
                             save();
                             updateButtons(getWindow().getDecorView());
                         }).show());
     }
 
+    private void showLanguagePicker() {
+        new P4gDialog.Builder(this)
+                .setTitle(t("Idioma do launcher", "Launcher language"))
+                .setSingleChoiceItems(Lang.names(), Lang.currentIndex(), (dialog, which) -> {
+                    Lang.select(this, which);
+                    dialog.dismiss();
+                    build(readyForPlay);
+                    refresh();
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null)
+                .show();
+    }
+
     private void showProfile(int slot) {
         SharedPreferences profile = getSharedPreferences("profile_" + slot, MODE_PRIVATE);
         String title = t("Perfil ", "Profile ") + slot;
-        new AlertDialog.Builder(this).setTitle(title)
+        new P4gDialog.Builder(this).setTitle(title)
                 .setItems(new String[] {t("Carregar", "Load"), t("Salvar configuração atual", "Save current settings")}, (dialog, action) -> {
                     if (action == 0) {
                         if (!profile.getBoolean("saved", false)) {
@@ -737,7 +855,7 @@ public class Launcher extends Activity {
                         save();
                         updateButtons(getWindow().getDecorView());
                     } else {
-                        new AlertDialog.Builder(this).setTitle(title)
+                        new P4gDialog.Builder(this).setTitle(title)
                                 .setMessage(t("Salvar as opções atuais neste perfil? Substitui o perfil anterior.",
                                         "Save current options here? This replaces the previous profile."))
                                 .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -767,6 +885,11 @@ public class Launcher extends Activity {
         if (!save()) return;
         Intent i = new Intent(this, GameActivity.class);
         i.putExtra(ImportActivity.EXTRA_NAME, gameName());
+        if (directMode()) {
+            i.putExtra(ImportActivity.EXTRA_URI, gameUri());
+            i.putExtra(ImportActivity.EXTRA_UPDATE_URI, updateUri());
+            i.putExtra(ImportActivity.EXTRA_UPDATE_NAME, updateName());
+        }
         startActivity(i);
     }
 
@@ -811,7 +934,7 @@ public class Launcher extends Activity {
                 play.setEnabled(true);
                 if (ready) {
                     String revision;
-                    try { revision = InstalledGameFiles.revision(InstalledGameFiles.game(installationDir(this))); }
+                    try { revision = directMode() ? gameName() : InstalledGameFiles.revision(InstalledGameFiles.game(installationDir(this))); }
                     catch (Exception e) { revision = "unknown"; }
                     status.setText(t("Pronto para jogar · " + revision, "Ready to play · " + revision));
                     play.setText(t("Jogar", "Play"));
@@ -820,6 +943,7 @@ public class Launcher extends Activity {
                     status.setText(game + "\nprod.keys: " + (keys ? t("selecionado", "selected") : t("não selecionado", "not selected")) +
                         (!access ? t("\nPermita o acesso aos arquivos para preparar o jogo.", "\nAllow file access to prepare the game.") :
                          !readable && gameUri() != null ? t("\nSelecione novamente o arquivo do jogo.", "\nSelect the game file again.") :
+                         readable && keys && directMode() ? t("\nMantenha o arquivo acessível para jogar.", "\nKeep the file accessible to play.") :
                          readable && keys ? t("\nInstale os dados para continuar. Mantenha o NSP/XCI até o fim da instalação.", "\nInstall the game data to continue. Keep the NSP/XCI until installation finishes.") : "") +
                         (storageError.isEmpty() ? "" : "\n" + storageError) +
                         (shaderError.isEmpty() ? "" : t("\nFalha ao gerar shaders:\n", "\nShader generation failed:\n") + shaderError));
@@ -830,7 +954,10 @@ public class Launcher extends Activity {
     }
 
     void updateButtons(View v) {
-        if (v instanceof Button && v.getTag() instanceof Option) {
+        if (v instanceof CheckBox && v.getTag() instanceof Option) {
+            Option o = (Option) v.getTag();
+            ((CheckBox) v).setChecked("1".equals(o.values[o.pick]));
+        } else if (v instanceof Button && v.getTag() instanceof Option) {
             Option o = (Option) v.getTag();
             ((Button) v).setText(label((Option) v.getTag()));
         } else if (v instanceof android.view.ViewGroup) {
@@ -840,7 +967,7 @@ public class Launcher extends Activity {
     }
 
     void tell(String title, String message) {
-        new AlertDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
+        new P4gDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
     }
 
     void openExternal(String url) {
@@ -852,7 +979,7 @@ public class Launcher extends Activity {
     }
 
     void askImport() {
-        new AlertDialog.Builder(this)
+        new P4gDialog.Builder(this)
                 .setTitle(t("Importar saves", "Import saves"))
                 .setMessage(t("Escolha um arquivo ZIP ou uma pasta com saves do Persona 4 Golden. "
                                 + "Seus saves atuais serão copiados antes da importação.",
@@ -884,7 +1011,7 @@ public class Launcher extends Activity {
         super.onActivityResult(request, result, data);
         if (request == PREPARE) {
             if (result == RESULT_OK && gameUri() != null) {
-                prefs().edit().putString("p4g_prepared_uri", gameUri()).apply();
+                prefs().edit().putString(directMode() ? "direct_ready" : "p4g_prepared_uri", gameUri()).apply();
                 Log.i("P4G-Launch", "Local game installation complete");
             }
             refresh();
@@ -981,7 +1108,7 @@ public class Launcher extends Activity {
         importingDriver = false;
         if (isFinishing() || isDestroyed()) return;
         if (error != null) {
-            new AlertDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
+            new P4gDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
                     .setPositiveButton("Back", (d, w) -> showDrivers()).show();
         } else {
             Toast.makeText(this, "Driver imported and selected.", Toast.LENGTH_SHORT).show();
@@ -1014,7 +1141,7 @@ public class Launcher extends Activity {
                 exportingLogs = false;
                 if (isFinishing() || isDestroyed()) return;
                 if (failure != null) tell(t("Não foi possível exportar os logs", "Could not export logs"), failure);
-                else new AlertDialog.Builder(this)
+                else new P4gDialog.Builder(this)
                         .setTitle(t("Logs exportados", "Logs exported"))
                         .setMessage(Lang.f("Salvos em Downloads/%s.", "Saved to Downloads/%s.", file.name))
                         .setPositiveButton(t("Compartilhar", "Share"), (dialog, which) -> shareLogs(file))
@@ -1075,7 +1202,7 @@ public class Launcher extends Activity {
             for (String line; (line = r.readLine()) != null; ) {
                 line = line.trim();
                 int eq = line.indexOf('=');
-                if (eq > 0) out.put(line.substring(0, eq).trim(), line.substring(eq + 1).trim());
+                if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
             }
         } catch (Exception ignored) {
         }
@@ -1096,6 +1223,26 @@ public class Launcher extends Activity {
         config.putAll(readConfig(new File(dataDir(), "config.txt")));
     }
 
+    static void putResolution(Map<String, String> target, String resolution) {
+        target.put("RESOLUTION", resolution);
+        if ("480p".equals(resolution)) {
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", "854x480");
+            target.put("NX_RENDER_RES", "854x480");
+            target.put("NX_RES", "480p");
+        } else if ("1080p".equals(resolution)) {
+            target.put("NX_HANDHELD", "0");
+            target.put("resolution", "1920x1080");
+            target.put("NX_RENDER_RES", "1920x1080");
+            target.put("NX_RES", "1080p");
+        } else {
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", "1280x720");
+            target.put("NX_RENDER_RES", "1280x720");
+            target.put("NX_RES", "720p");
+        }
+    }
+
     boolean save() {
         if (!hasAccess()) { askAccess(); return false; }
         dataDir().mkdirs();
@@ -1105,29 +1252,9 @@ public class Launcher extends Activity {
         }
         load();
         for (Option o : options) config.put(o.key, o.values[o.pick]);
-        final String res = config.get("RESOLUTION");
-        if ("360p".equals(res)) {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "640x360");
-            config.put("NX_RENDER_RES", "640x360");
-            config.put("NX_RES", "360p");
-        } else if ("480p".equals(res)) {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "854x480");
-            config.put("NX_RENDER_RES", "854x480");
-            config.put("NX_RES", "480p");
-        } else if ("1080p".equals(res)) {
-            config.put("NX_HANDHELD", "0");
-            config.put("resolution", "1920x1080");
-            config.put("NX_RENDER_RES", "1920x1080");
-            config.put("NX_RES", "1080p");
-        } else {
-            config.put("NX_HANDHELD", "1");
-            config.put("resolution", "1280x720");
-            config.put("NX_RENDER_RES", "1280x720");
-            config.put("NX_RES", "720p");
-        }
+        putResolution(config, config.get("RESOLUTION"));
         for (String k : new String[] {"RENDER_SCALE", "NX_ANISO_MAX"}) config.remove(k);
+        config.remove("NX_OVERLAY_FRAME_TIME");
         for (String key : new String[] {"language", "GRAPHICS", "NX_GAMEPAD_LAYOUT"}) config.remove(key);
         if (writeConfig(new File(dataDir(), "config.txt"), config)) return true;
         tell(t("Erro ao salvar", "Could not save"), t("Verifique o espaço livre e a permissão de armazenamento.",
@@ -1224,20 +1351,46 @@ public class Launcher extends Activity {
         LinearLayout row = new LinearLayout(this);
         row.setOrientation(LinearLayout.HORIZONTAL);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, dp(4), 0, dp(4));
+        row.setPadding(0, dp(2), 0, dp(2));
         TextView name = new TextView(this);
         name.setText(label);
         name.setTextColor(Color.WHITE);
-        name.setTextSize(17);
+        name.setTextSize(16);
         row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button b = new Button(this);
         P4gTheme.button(b, false);
+        compactButton(b);
         b.setAllCaps(false);
-        b.setMinWidth(dp(120));
-        b.setMaxWidth(dp(170));
+        b.setMinWidth(dp(110));
+        b.setMaxWidth(dp(160));
         b.setText(button);
         b.setOnClickListener(click);
         row.addView(b);
         root.addView(row);
+    }
+
+    private void compactButton(Button button) {
+        button.setTextSize(13);
+        button.setMinHeight(dp(42));
+        button.setMinimumHeight(dp(42));
+        button.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    private void applySafeAreaInsets(View view) {
+        if (launcherLandscape()) return;
+        view.setOnApplyWindowInsetsListener((target, insets) -> {
+            int[] safe;
+            if (Build.VERSION.SDK_INT >= 30) {
+                safe = Api30Helper.safeArea(insets);
+            } else {
+                safe = new int[] {
+                        insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                        insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom()
+                };
+            }
+            target.setPadding(safe[0], safe[1], safe[2], safe[3]);
+            return insets;
+        });
+        view.requestApplyInsets();
     }
 }

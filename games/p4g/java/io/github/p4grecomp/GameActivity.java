@@ -21,20 +21,41 @@ public class GameActivity extends NativeActivity {
     private PerformanceOverlay performanceOverlay;
     static native long nativeFrames();
 
+    private void openSource(String uri, String name, String fdKey, String nameKey) throws Exception {
+        try (android.os.ParcelFileDescriptor file = getContentResolver().openFileDescriptor(android.net.Uri.parse(uri), "r")) {
+            if (file == null) throw new java.io.IOException("Could not open " + name);
+            Os.setenv(nameKey, name, true);
+            Os.setenv(fdKey, Integer.toString(file.detachFd()), true);
+        }
+    }
+
     @Override protected void onCreate(Bundle state) {
         // The installed payload is checked by the launcher; no source URI, NSP descriptor or keys are opened here.
         try {
             File data = Launcher.dataDir();
             // Android draws the metrics panel; avoid duplicating the native FPS digits.
             Os.setenv("NX_SHOW_FPS", "0", true);
-            File installed = Launcher.installationDir(this);
-            if (!InstalledGameFiles.present(installed))
-                throw new java.io.IOException("Game installation is incomplete. Install the game again from its NSP/XCI.");
-            Os.unsetenv("NX_GAME_FD");
-            Os.unsetenv("NX_GAME_NSP");
-            Os.unsetenv("NX_GAME_NAME");
-            Os.setenv("NX_P4G_INSTALLED", "1", true);
-            Os.setenv("NX_P4G_GAME_ROOT", InstalledGameFiles.game(installed).getCanonicalPath(), true);
+            String uri = getIntent().getStringExtra(ImportActivity.EXTRA_URI);
+            Os.unsetenv("NX_GAME_UPDATE_FD");
+            if (uri != null) {
+                Os.unsetenv("NX_P4G_INSTALLED");
+                Os.unsetenv("NX_P4G_GAME_ROOT");
+                openSource(uri, getIntent().getStringExtra(ImportActivity.EXTRA_NAME), "NX_GAME_FD", "NX_GAME_NAME");
+                String update = getIntent().getStringExtra(ImportActivity.EXTRA_UPDATE_URI);
+                if (update != null) openSource(update, getIntent().getStringExtra(ImportActivity.EXTRA_UPDATE_NAME),
+                        "NX_GAME_UPDATE_FD", "NX_GAME_UPDATE_NAME");
+                Os.setenv("NX_KEYS", Launcher.keysFile(this, "prod.keys").getPath(), true);
+                Os.setenv("NX_TITLE_KEYS", Launcher.keysFile(this, "title.keys").getPath(), true);
+            } else {
+                File installed = Launcher.installationDir(this);
+                if (!InstalledGameFiles.present(installed))
+                    throw new java.io.IOException("Game installation is incomplete. Install the game again from its NSP/XCI.");
+                Os.unsetenv("NX_GAME_FD");
+                Os.unsetenv("NX_GAME_NSP");
+                Os.unsetenv("NX_GAME_NAME");
+                Os.setenv("NX_P4G_INSTALLED", "1", true);
+                Os.setenv("NX_P4G_GAME_ROOT", InstalledGameFiles.game(installed).getCanonicalPath(), true);
+            }
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(new File(getFilesDir(), "data_root.txt"))) {
                 out.write((data.getCanonicalPath() + "\n").getBytes("UTF-8"));
             }

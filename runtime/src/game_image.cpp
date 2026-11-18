@@ -59,6 +59,10 @@ void open_image() {
         const char* name = std::getenv("NX_GAME_NAME");
         shown = name && *name ? name : "game.nsp";
         in.push_back({shown, std::atoi(fd)});
+        if (const char* update = std::getenv("NX_GAME_UPDATE_FD")) {
+            const char* update_name = std::getenv("NX_GAME_UPDATE_NAME");
+            in.push_back({update_name ? update_name : "update.nsp", std::atoi(update)});
+        }
     } else {
         shown = base_name(path);
         int f = open_read(path);

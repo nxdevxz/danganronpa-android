@@ -18,7 +18,7 @@ final class Importer {
         String titleKeysPath,
         String dataDir,
         String workDir,
-        int jobs
+        int jobs, boolean direct
     );
 
     static native int[] progress();
