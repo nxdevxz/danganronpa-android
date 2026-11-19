@@ -275,23 +275,9 @@ public class Launcher extends Activity {
                 new String[] {"360p", "480p", "720p", "1080p"},
                 new String[] {"360p", "480p", "720p", "1080p"}, 2));
         options.add(new Option("NX_STRETCH", "Formato da tela", "Screen format",
-                new String[] {"0", "16:10", "1", "hor+"},
-                new String[] {"16:9", "16:10", "Esticar", "Widescreen (Hor+)"},
-                new String[] {"16:9", "16:10", "Stretch", "Widescreen (Hor+)"}, 0));
-        options.add(new Option("NX_FSR", "Super-resolução (FSR)", "Super resolution (FSR)", new String[] {"0", "1"},
-                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
-        options.add(new Option("NX_HUD_1080", "Interface em alta resolução (experimental)", "High-resolution HUD (experimental)",
-                new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
-        options.add(new Option("NX_SHADOWS", "Sombras", "Shadows", new String[] {"0", "1"},
-                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 1));
-        options.add(new Option("NX_MALI_LOW_SHADOWS", "Resolução das sombras", "Shadow resolution",
-                new String[] {"0", "1"}, new String[] {"Original", "Metade (experimental)"},
-                new String[] {"Original", "Half (experimental)"}, 0));
-        options.add(new Option("NX_DISABLE_BLOOM", "Desativar bloom (experimental)", "Disable bloom (experimental)", new String[] {"0", "1"},
-                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
-        options.add(new Option("NX_VIBRATION", "Intensidade da vibração", "Vibration strength",
-                new String[] {"0", "25", "50", "75", "100"}, new String[] {"0%", "25%", "50%", "75%", "100%"},
-                new String[] {"0%", "25%", "50%", "75%", "100%"}, 4));
+                new String[] {"0", "16:10", "1"},
+                new String[] {"16:9", "16:10", "Esticar"},
+                new String[] {"16:9", "16:10", "Stretch"}, 0));
         options.add(new Option("NX_FPS_CAP", "Limite de FPS", "FPS limit", new String[] {"30", "45", "60"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"}, 0));
@@ -314,28 +300,8 @@ public class Launcher extends Activity {
         options.add(new Option("NX_TRACE_PERF", "Estatísticas detalhadas de desempenho", "Detailed performance logging",
                 new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
                 new String[] {"Off", "On"}, 0));
-        options.add(new Option("NX_PIPE_PREWARM", "Pré-compilação de pipelines (experimental)",
-                "Pipeline prewarming (experimental)", new String[] {"1", "2", "0"},
-                new String[] {"Em segundo plano", "Intensa (mais CPU)", "Desativado"},
-                new String[] {"Background", "Intensive (more CPU)", "Off"}, 0));
-        options.add(new Option("NX_PIPE_PREWARM_LOAD", "Carga da pré-compilação em segundo plano", "Background prewarm load",
-                new String[] {"light", "standard"}, new String[] {"Leve", "Padrão"},
-                new String[] {"Light", "Standard"}, 1));
-        options.add(new Option("NX_AFFINITY", "Afinidade de CPU (experimental)", "CPU affinity (experimental)",
-                new String[] {"0", "2", "1"},
-                new String[] {"Sistema Android", "Otimizada (recomendada)", "Separar threads de quadro"},
-                new String[] {"Android scheduler", "Optimized (recommended)", "Split frame threads"}, 1));
-        options.add(new Option("NX_P4G_MOTION_BLUR", "Desativar desfoque de movimento (experimental)",
-                "Disable motion blur (experimental)", new String[] {"1", "0"},
-                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
-        options.add(new Option("NX_LOD_BIAS", "Nitidez das texturas 3D (experimental)",
-                "3D texture sharpness (experimental)", new String[] {"0", "-0.5", "-1"},
-                new String[] {"Original", "Mais nítidas", "Mais nítidas (-1, teste)"},
-                new String[] {"Original", "Sharper", "Sharper (-1, test)"}, 0));
         options.add(new Option("NX_TOUCH_SHOW", "Controles na tela", "On-screen controls", new String[] {"1", "0"},
                 new String[] {"Ativados", "Desativados"}, new String[] {"On", "Off"}, 0));
-        options.add(new Option("NX_TOUCH_HIDE", "Ocultar botões sem desativar o toque", "Hide buttons while keeping touch input",
-                new String[] {"0", "1"}, new String[] {"Não", "Sim"}, new String[] {"No", "Yes"}, 0));
         options.add(new Option("NX_GAMEPAD_LAYOUT", "Layout do controle físico", "Gamepad layout",
                 new String[] {"0", "1"}, new String[] {"Nintendo (A à direita)", "Xbox (A embaixo)"},
                 new String[] {"Nintendo (A right)", "Xbox (A bottom)"}, 1));
@@ -449,6 +415,34 @@ public class Launcher extends Activity {
         return body;
     }
 
+    private void addLauncherSettings(LinearLayout parent) {
+        LinearLayout launcherSettings = settingsGroup(parent, "launcher", t("Configurações do launcher", "Launcher settings"),
+                t("Idioma e orientação", "Language and orientation"), false);
+        addRow(launcherSettings, t("Idioma do launcher", "Launcher language"),
+                Lang.currentName(), v -> showLanguagePicker());
+
+        addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
+                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", DEFAULT_LANDSCAPE)
+                        ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
+                    SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
+                    settings.edit().putBoolean("landscape",
+                            !settings.getBoolean("landscape", DEFAULT_LANDSCAPE)).apply();
+                    applyLauncherOrientation();
+                });
+        addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
+                t("Redefinir", "Reset"), v -> new P4gDialog.Builder(this)
+                        .setMessage(t("Redefinir o idioma e a orientação do launcher?",
+                                "Reset the launcher language and orientation?"))
+                        .setNegativeButton(t("Cancelar", "Cancel"), null)
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
+                            getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
+                            Lang.load(this);
+                            applyLauncherOrientation();
+                            build(readyForPlay);
+                            refresh();
+                        }).show());
+    }
+
     void build(boolean ready) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
@@ -475,32 +469,6 @@ public class Launcher extends Activity {
         status.setTextSize(13);
         status.setPadding(0, dp(4), 0, dp(8));
         root.addView(status);
-
-        LinearLayout launcherSettings = settingsGroup(root, "launcher", t("Configurações do launcher", "Launcher settings"),
-                t("Idioma e orientação", "Language and orientation"), false);
-        addRow(launcherSettings, t("Idioma do launcher", "Launcher language"),
-                Lang.currentName(), v -> showLanguagePicker());
-
-        addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
-                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", DEFAULT_LANDSCAPE)
-                        ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
-                    SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
-                    settings.edit().putBoolean("landscape",
-                            !settings.getBoolean("landscape", DEFAULT_LANDSCAPE)).apply();
-                    applyLauncherOrientation();
-                });
-        addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
-                t("Redefinir", "Reset"), v -> new P4gDialog.Builder(this)
-                        .setMessage(t("Redefinir o idioma e a orientação do launcher?",
-                                "Reset the launcher language and orientation?"))
-                        .setNegativeButton(t("Cancelar", "Cancel"), null)
-                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
-                            getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
-                            Lang.load(this);
-                            applyLauncherOrientation();
-                            build(readyForPlay);
-                            refresh();
-                        }).show());
 
         if (!ready) {
         P4gTheme.section(root, t("Preparação do jogo", "Game setup"));
@@ -534,6 +502,7 @@ public class Launcher extends Activity {
             else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
             else { prefs().edit().remove("p4g_prepared_uri").apply(); prepare(); }
         });
+        addLauncherSettings(root);
         ScrollView setup = new ScrollView(this);
         setup.setBackgroundColor(P4gTheme.BACKGROUND);
         setup.setFillViewport(true);
@@ -553,36 +522,20 @@ public class Launcher extends Activity {
         playLayout.bottomMargin = dp(10);
         play.setOnClickListener(v -> installShadersAndPlay());
 
-        LinearLayout presets = settingsGroup(root, "presets",
-                t("Predefinições de configuração", "Configuration presets"),
-                t("Escolha entre desempenho, equilíbrio e qualidade de imagem.",
-                        "Choose between frame rate, balance and image quality."), true);
-        addRow(presets, t("Desempenho", "Performance"), t("Aplicar", "Apply"),
-                v -> applyPreset("performance"));
-        addRow(presets, t("Normal", "Normal"), t("Aplicar", "Apply"),
-                v -> applyPreset("normal"));
-        addRow(presets, t("Qualidade", "Quality"), t("Aplicar", "Apply"),
-                v -> applyPreset("quality"));
-
-        LinearLayout quick = settingsGroup(root, "quick", t("Ajustes rápidos", "Quick settings"),
-                t("Tela, desempenho e controles", "Display, performance and controls"), true);
-        LinearLayout graphics = settingsGroup(root, "graphics", t("Gráficos avançados", "Advanced graphics"),
-                t("Driver e ajustes experimentais", "Driver and experimental settings"), false);
-        LinearLayout controls = settingsGroup(root, "controls", t("Controles", "Controls"),
-                t("Toque, sensibilidade e posição", "Touch, sensitivity and layout"), false);
-        LinearLayout overlay = settingsGroup(root, "overlay", "Overlay",
-                t("Estatísticas durante o jogo", "In-game statistics"), false);
-        LinearLayout profiles = settingsGroup(root, "profiles", t("Perfis de configuração", "Settings profiles"),
-                t("Salva as opções de tela, gráficos, controles e overlay. Layout, driver e idioma são independentes.",
-                        "Stores display, graphics, controls and overlay options. Layout, driver and language are separate."), false);
-        for (int slot = 1; slot <= 3; slot++) {
-            final int profile = slot;
-            addRow(profiles, t("Perfil ", "Profile ") + slot, t("Gerenciar", "Manage"), v -> showProfile(profile));
-        }
-        LinearLayout content = settingsGroup(root, "content", t("Jogo, saves e mods", "Game, saves & mods"),
-                t("Updates, backups e conteúdo", "Updates, backups and content"), false);
-        LinearLayout support = settingsGroup(root, "support", t("Informações e suporte", "Information & support"),
-                t("Diagnóstico e comunidade", "Diagnostics and community"), false);
+        LinearLayout quick = settingsGroup(root, "display", t("Tela e gráficos", "Display and graphics"), "", false);
+        LinearLayout controls = settingsGroup(root, "controls", t("Controles", "Controls"), "", false);
+        LinearLayout content = settingsGroup(root, "content", t("Jogo, saves e mods", "Game, saves and mods"), "", false);
+        LinearLayout support = settingsGroup(root, "more", t("Mais opções", "More options"), "", false);
+        addLauncherSettings(support);
+        addRow(quick, t("Predefinição gráfica", "Graphics preset"), t("Escolher", "Choose"), v ->
+                new P4gDialog.Builder(this).setTitle(t("Predefinição gráfica", "Graphics preset"))
+                        .setItems(new String[] {t("Desempenho", "Performance"), t("Equilibrado", "Balanced"), t("Qualidade", "Quality")},
+                                (dialog, which) -> applyPreset(new String[] {"performance", "normal", "quality"}[which])).show());
+        LinearLayout overlay = settingsGroup(support, "overlay", t("Monitor de desempenho", "Performance monitor"), "", false);
+        addRow(support, t("Perfis salvos", "Saved profiles"), t("Escolher", "Choose"), v ->
+                new P4gDialog.Builder(this).setTitle(t("Perfis salvos", "Saved profiles"))
+                        .setItems(new String[] {t("Perfil 1", "Profile 1"), t("Perfil 2", "Profile 2"), t("Perfil 3", "Profile 3")},
+                                (dialog, which) -> showProfile(which + 1)).show());
 
         P4gTheme.section(content, t("Atualização do jogo", "Game update"));
         addStorageMode(content);
@@ -607,14 +560,6 @@ public class Launcher extends Activity {
         });
         P4gTheme.section(content, t("Saves e mods", "Saves & mods"));
         LinearLayout diagnostics = settingsGroup(support, "logs", t("Logs e diagnóstico", "Logs & diagnostics"), "", false);
-        TextView diagnosticHelp = new TextView(this);
-        diagnosticHelp.setText(t(
-                "Ative as estatísticas para registrar renderização, esperas e compilação de pipelines. Isso pode reduzir o desempenho. Jogue a mesma parte, exporte os logs e desative as estatísticas ao terminar.",
-                "Enable detailed logging to record rendering times, waits and pipeline compilation. Logging can add overhead. Changes apply when you start the game again. Play the same section and export logs; turn logging off after testing. CPU affinity does not guarantee higher FPS."));
-        diagnosticHelp.setTextColor(Color.LTGRAY);
-        diagnosticHelp.setTextSize(14);
-        diagnosticHelp.setPadding(0, dp(4), 0, dp(8));
-        diagnostics.addView(diagnosticHelp);
         P4gTheme.section(support, t("Comunidade", "Community"));
         addRow(support, "GitHub", t("Abrir", "Open"),
                 v -> openExternal("https://github.com/nxdevxz/p4g-android"));
@@ -657,19 +602,20 @@ public class Launcher extends Activity {
             value.setMinWidth(dp(110));
             value.setMaxWidth(dp(160));
             row.addView(value);
-            value.setOnClickListener(new View.OnClickListener() {
-                @Override
-                public void onClick(View v) {
-                    o.pick = (o.pick + 1) % o.values.length;
-                    value.setText(label(o));
-                    save();
-                }
+            value.setOnClickListener(v -> {
+                String[] labels = new String[o.values.length];
+                for (int i = 0; i < labels.length; i++) labels[i] = t(o.labelsPt[i], o.labelsEn[i]);
+                new P4gDialog.Builder(this).setTitle(t(o.pt, o.en)).setSingleChoiceItems(labels, o.pick, (dialog, which) -> {
+                    dialog.dismiss();
+                    o.pick = which;
+                    if (save()) value.setText(label(o));
+                }).show();
             });
             value.setTag(o);
-            (group.equals("quick") ? quick : group.equals("logs") ? diagnostics :
-                    group.equals("overlay") ? overlay : group.equals("controls") ? controls : graphics).addView(row);
+            (group.equals("logs") ? diagnostics :
+                    group.equals("overlay") ? overlay : group.equals("controls") ? controls : quick).addView(row);
         }
-        addDriverRow(graphics);
+        addDriverRow(quick);
         addLogsRow(diagnostics);
 
         LinearLayout edit = new LinearLayout(this);
@@ -703,7 +649,6 @@ public class Launcher extends Activity {
 
         // Keep the reset action as the final item in every settings section.
         addResetRow(quick, "quick");
-        addResetRow(graphics, "graphics");
         addResetRow(controls, "controls");
         addResetRow(overlay, "overlay");
         addResetRow(diagnostics, "logs");
@@ -800,12 +745,10 @@ public class Launcher extends Activity {
     boolean installingShaders;
 
     static String optionGroup(String key) {
-        if (key.equals("RESOLUTION") || key.equals("NX_STRETCH") || key.equals("NX_FPS_CAP") ||
-                key.equals("NX_MAX_ANISO")) return "quick";
         if (key.equals("NX_TRACE_PERF")) return "logs";
         if (key.equals("NX_SHOW_FPS") || key.startsWith("NX_OVERLAY_")) return "overlay";
-        if (key.equals("NX_GAMEPAD_LAYOUT") || key.equals("NX_VIBRATION") || key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
-        return "graphics";
+        if (key.equals("NX_GAMEPAD_LAYOUT") || key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
+        return "quick";
     }
 
     static boolean isOverlayToggle(String key) {
@@ -814,13 +757,13 @@ public class Launcher extends Activity {
     }
 
     static String[] presetValues(String preset) {
-        if ("performance".equals(preset)) return new String[] {"480p", "60", "1", "light", "0"};
-        if ("quality".equals(preset)) return new String[] {"1080p", "30", "16", "standard", "-0.5"};
-        return new String[] {"720p", "30", "4", "standard", "0"};
+        if ("performance".equals(preset)) return new String[] {"480p", "30", "1"};
+        if ("quality".equals(preset)) return new String[] {"1080p", "30", "16"};
+        return new String[] {"720p", "30", "4"};
     }
 
     private void applyPreset(String preset) {
-        String[] keys = {"RESOLUTION", "NX_FPS_CAP", "NX_MAX_ANISO", "NX_PIPE_PREWARM_LOAD", "NX_LOD_BIAS"};
+        String[] keys = {"RESOLUTION", "NX_FPS_CAP", "NX_MAX_ANISO"};
         String[] values = presetValues(preset);
         for (Option option : options)
             for (int i = 0; i < keys.length; i++)
@@ -1263,6 +1206,13 @@ public class Launcher extends Activity {
         }
     }
 
+    static void removeRetiredSettings(Map<String, String> settings) {
+        for (String key : new String[] {"RENDER_SCALE", "NX_ANISO_MAX", "NX_OVERLAY_FRAME_TIME", "language",
+                "GRAPHICS", "NX_FSR", "NX_HUD_1080", "NX_SHADOWS", "NX_MALI_LOW_SHADOWS", "NX_DISABLE_BLOOM",
+                "NX_VIBRATION", "NX_TOUCH_HIDE", "NX_PIPE_PREWARM", "NX_PIPE_PREWARM_LOAD", "NX_AFFINITY",
+                "NX_P4G_MOTION_BLUR", "NX_LOD_BIAS"}) settings.remove(key);
+    }
+
     boolean save() {
         if (!hasAccess()) { askAccess(); return false; }
         dataDir().mkdirs();
@@ -1273,9 +1223,7 @@ public class Launcher extends Activity {
         load();
         for (Option o : options) config.put(o.key, o.values[o.pick]);
         putResolution(config, config.get("RESOLUTION"));
-        for (String k : new String[] {"RENDER_SCALE", "NX_ANISO_MAX"}) config.remove(k);
-        config.remove("NX_OVERLAY_FRAME_TIME");
-        for (String key : new String[] {"language", "GRAPHICS"}) config.remove(key);
+        removeRetiredSettings(config);
         if (writeConfig(new File(dataDir(), "config.txt"), config)) return true;
         tell(t("Erro ao salvar", "Could not save"), t("Verifique o espaço livre e a permissão de armazenamento.",
                 "Check free space and storage permission."));

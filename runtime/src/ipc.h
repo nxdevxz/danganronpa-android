@@ -62,7 +62,6 @@ struct Service : std::enable_shared_from_this<Service> {
 };
 
 using ServiceFactory = std::function<std::shared_ptr<Service>()>;
-void add_vibration_commands(Service& service);
 void register_service(const std::string& name, ServiceFactory f);
 std::shared_ptr<Service> make_service(const std::string& name);
 

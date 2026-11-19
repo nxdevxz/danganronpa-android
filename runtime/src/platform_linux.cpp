@@ -337,8 +337,6 @@ static void sample_input() {
     g_pad = p;
 }
 
-void rumble(float) {}  // no vibration here
-
 void read_pad(PadState& p) {
     {
         std::lock_guard lk(g_pad_lock);

@@ -83,9 +83,6 @@ struct Bound {
     bool has_index = false, has_dynamic = false;
     Upload index;
     VkIndexType index_type = VK_INDEX_TYPE_UINT16;
-    uint32_t cull = UINT32_MAX, front = UINT32_MAX, restart = UINT32_MAX;
-    VkColorComponentFlags write_masks[8]{};
-    uint32_t mask_count = 0;
     VkViewport viewport{};
     VkRect2D scissor{};
     float blend[4] = {};
@@ -96,32 +93,15 @@ uint64_t g_state_set = 0, g_state_kept = 0;  // state commands recorded and left
 template <typename T>
 bool same_bytes(const T& a, const T& b) { return std::memcmp(&a, &b, sizeof(T)) == 0; }
 
-void bind_vertex_streams(VkCommandBuffer cb, uint32_t mask, const Upload* streams) {
-    const Upload zero = zero_stream();
-    mask = (mask & 0x7fffu) | (1u << 15);
-    VkBuffer buffers[16];
-    VkDeviceSize offsets[16];
-    uint32_t first = 0, count = 0;
-    for (uint32_t slot = 0; slot <= 16; ++slot) {
-        if ((mask >> slot) & 1u) {
-            const Upload& u = slot == 15 ? zero : streams[slot];
-            const Upload& prev = g_bound.vertex[slot];
-            if (!(g_bound.vertex_set & (1u << slot)) || prev.buffer != u.buffer || prev.offset != u.offset) {
-                if (!count) first = slot;
-                buffers[count] = u.buffer;
-                offsets[count++] = u.offset;
-                g_bound.vertex[slot] = u;
-                g_bound.vertex_set |= 1u << slot;
-                ++g_state_set;
-                continue;
-            }
-            ++g_state_kept;
-        }
-        if (count) {
-            p_vkCmdBindVertexBuffers(cb, first, count, buffers, offsets);
-            count = 0;
-        }
+void bind_vertex(VkCommandBuffer cb, uint32_t binding, const Upload& u) {
+    Upload& now = g_bound.vertex[binding];
+    if ((g_bound.vertex_set >> binding & 1) && now.buffer == u.buffer && now.offset == u.offset) {
+        g_state_kept++;
+        return;
     }
+    VkDeviceSize off = u.offset;
+    p_vkCmdBindVertexBuffers(cb, binding, 1, &u.buffer, &off);
+    now = u, g_bound.vertex_set |= 1u << binding, g_state_set++;
 }
 
 // Viewport, scissor, blend constants and the rasterizer's dynamic state (every pipeline declares them dynamic).
@@ -880,18 +860,6 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
                 g_state.viewport[0], g_state.viewport[1], g_state.viewport[2], g_state.viewport[3]);
         }
     }
-    const auto& caps = extended_draw_state();
-    const uint32_t cull = key.polygon.cull, front = key.polygon.front, restart = key.restart;
-    VkColorComponentFlags masks[8]{};
-    if (caps.cull) key.polygon.cull = 0;
-    if (caps.front) key.polygon.front = 0;
-    if (caps.restart) key.restart = 0;
-    if (caps.write_mask) {
-        for (uint32_t i = 0; i < key.color_count; ++i) {
-            masks[i] = key.mask.mask[i] & 15u;
-            key.mask.mask[i] = 0;
-        }
-    }
     VkPipeline pipeline = graphics_pipeline(key, layout);
     if (!pipeline) {
         g_stats.no_pipeline++;
@@ -906,28 +874,12 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     } else {
         g_state_kept++;
     }
-    if (caps.cull && g_bound.cull != cull) {
-        caps.cull(cb, vk_cull(cull));
-        g_bound.cull = cull;
-    }
-    if (caps.front && g_bound.front != front) {
-        caps.front(cb, front ? VK_FRONT_FACE_COUNTER_CLOCKWISE : VK_FRONT_FACE_CLOCKWISE);
-        g_bound.front = front;
-    }
-    if (caps.restart && g_bound.restart != restart) {
-        caps.restart(cb, restart ? VK_TRUE : VK_FALSE);
-        g_bound.restart = restart;
-    }
-    if (caps.write_mask && key.color_count && (g_bound.mask_count != key.color_count ||
-        std::memcmp(g_bound.write_masks, masks, key.color_count * sizeof(*masks)))) {
-        caps.write_mask(cb, 0, key.color_count, masks);
-        std::copy_n(masks, key.color_count, g_bound.write_masks);
-        g_bound.mask_count = key.color_count;
-    }
     bind_sets(cb, VK_PIPELINE_BIND_POINT_GRAPHICS, layout);
 
     // The vertex buffers resolved above, plus the zero stream (binding 15).
-    bind_vertex_streams(cb, in.used, in.vertex);
+    for (uint32_t s = 0; s < 15; s++)
+        if (in.used >> s & 1) bind_vertex(cb, s, in.vertex[s]);
+    bind_vertex(cb, 15, zero_stream());
 
     VkViewport vp{0, 0, float(g_pass_extent.width), float(g_pass_extent.height), 0, 1};
     if (g_state.has_viewport)
@@ -948,21 +900,6 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
             int32_t x = sc.offset.x, w = int32_t(sc.extent.width);
             uw_span(x, w, g_pass_extent.width);
             sc.offset.x = x, sc.extent.width = uint32_t(w);
-        }
-    }
-    if (tt.depth && depth_only(tt)) {
-        GpuImage* depth = image_of(tt.depth);
-        if (depth && depth->half_shadow) {
-            if (g_state.has_viewport) vp.x *= .5f, vp.y *= .5f, vp.width *= .5f, vp.height *= .5f;
-            if (g_state.has_scissor) {
-                const auto half_span = [](int32_t& offset, uint32_t& extent, uint32_t limit) {
-                    uint64_t end = uint64_t(offset) + extent;
-                    offset = std::min(uint32_t(offset) / 2, limit);
-                    extent = std::min<uint64_t>((end + 1) / 2, limit) - offset;
-                };
-                half_span(sc.offset.x, sc.extent.width, g_pass_extent.width);
-                half_span(sc.offset.y, sc.extent.height, g_pass_extent.height);
-            }
         }
     }
     if (g_hud_target) {  // NX_HUD_1080: the guest's 1280x720 pixels, 3/2 (or 5/4) each

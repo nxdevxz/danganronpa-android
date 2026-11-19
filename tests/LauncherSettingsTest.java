@@ -15,22 +15,24 @@ public final class LauncherSettingsTest {
         check(Launcher.isOverlayToggle("NX_SHOW_FPS"));
         check(Launcher.isOverlayToggle("NX_OVERLAY_RAM"));
         check(!Launcher.isOverlayToggle("NX_OVERLAY_SIZE"));
-        check(Launcher.optionGroup("NX_PIPE_PREWARM_LOAD").equals("graphics"));
         check(Launcher.optionGroup("NX_TOUCH_OPACITY").equals("controls"));
         check(Launcher.optionGroup("NX_TOUCH_SHOW").equals("controls"));
         check(Launcher.optionGroup("NX_MAX_ANISO").equals("quick"));
         check(Launcher.optionGroup("NX_TRACE_PERF").equals("logs"));
         check(java.util.Arrays.equals(Launcher.presetValues("performance"),
-                new String[] {"480p", "60", "1", "light", "0"}));
+                new String[] {"480p", "30", "1"}));
         check(java.util.Arrays.equals(Launcher.presetValues("normal"),
-                new String[] {"720p", "30", "4", "standard", "0"}));
+                new String[] {"720p", "30", "4"}));
         check(java.util.Arrays.equals(Launcher.presetValues("quality"),
-                new String[] {"1080p", "30", "16", "standard", "-0.5"}));
-        check(Launcher.optionGroup("NX_VIBRATION").equals("controls"));
+                new String[] {"1080p", "30", "16"}));
         check(Launcher.optionGroup("NX_GAMEPAD_LAYOUT").equals("controls"));
-        check(Launcher.optionGroup("NX_TOUCH_HIDE").equals("controls"));
-        check(Launcher.optionGroup("NX_FSR").equals("graphics"));
         java.util.Map<String, String> config = new java.util.HashMap<>();
+        config.put("NX_FSR", "1");
+        config.put("NX_SHADOWS", "0");
+        config.put("NX_PIPE_PREWARM", "2");
+        config.put("NX_TOUCH_SIZE", "125");
+        Launcher.removeRetiredSettings(config);
+        check(config.size() == 1 && "125".equals(config.get("NX_TOUCH_SIZE")));
         Launcher.putResolution(config, "360p");
         check("640x360".equals(config.get("resolution")));
         check("640x360".equals(config.get("NX_RENDER_RES")));

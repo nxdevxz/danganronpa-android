@@ -34,7 +34,6 @@ struct GpuImage {
     VkImageViewType view_type = VK_IMAGE_VIEW_TYPE_2D;
     VkImageLayout layout = VK_IMAGE_LAYOUT_UNDEFINED;
     bool rendered = false;  // written by the GPU: never re-uploaded from guest memory
-    bool half_shadow = false;
     bool uploaded = false;  // filled from the texture's pool memory
     // Given texels by nvnTextureWriteTexels: those never reach guest memory here, so it is not uploaded from there
     // again (a pool flush over it wiped the light probes' direction map, docs/nvn/DEBUG.md #49).
@@ -67,13 +66,6 @@ VkDevice vk_device();
 bool vk_depth_clip_control();
 bool vk_indirect_count();  // VK_KHR_draw_indirect_count enabled (nvn_occlusion.cpp)
 bool vk_list_restart();  // VK_EXT_primitive_topology_list_restart enabled (nvn_draw.cpp)
-struct ExtendedDrawState {
-    PFN_vkCmdSetCullMode cull = nullptr;
-    PFN_vkCmdSetFrontFace front = nullptr;
-    PFN_vkCmdSetPrimitiveRestartEnable restart = nullptr;
-    PFN_vkCmdSetColorWriteMaskEXT write_mask = nullptr;
-};
-const ExtendedDrawState& extended_draw_state();
 bool vk_dynamic_rendering();  // core 1.3 dynamic rendering; without it, render pass objects (nvn_renderpass.cpp)
 // The core features the device was created with (all the GPU has): depthClamp, depthBiasClamp, depthBounds, ...
 const VkPhysicalDeviceFeatures& vk_features();

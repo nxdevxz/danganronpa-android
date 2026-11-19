@@ -147,7 +147,6 @@ ServiceRegistrar r_apm("apm", [] {
 
 ServiceRegistrar r_hid("hid", [] {
     return make("hid", [](Service& s) {
-        add_vibration_commands(s);
         // CreateAppletResource
         s.cmds[0] = [](IpcCtx& c) {
             auto resource = make("IAppletResource", [](Service& r) {

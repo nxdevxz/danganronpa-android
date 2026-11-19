@@ -18,21 +18,11 @@ const game::Info game::kInfo = {
 void game::after_init() {
 
 #if defined(__ANDROID__)
-    // P4G experimental native profile. Keep every switch user-overridable from config.txt:
-    // platform_android imports that file into the environment before the guest starts.
-    // The profile deliberately leaves NX_ASYNC_PIPELINES off; skipping a draw while a
-    // pipeline compiles hides a hitch by showing an incomplete frame, which is not an
-    // acceptable default for an official-style port.
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
-    // Lighter than 0.4.5 (3 workers, 2 ms, 64 in flight, scan 128): the replay thread is the frame bottleneck.
-    default_setting("NX_PIPE_THREADS", "2");
-    default_setting("NX_PIPE_PREWARM", "1");
-    default_setting("NX_PIPE_PREWARM_BUDGET_US", "1000");
-    default_setting("NX_PIPE_PREWARM_INFLIGHT", "32");
-    default_setting("NX_PIPE_PREWARM_SCAN", "64");
-    default_setting("NX_AFFINITY", "2");
+    default_setting("NX_PIPE_PREWARM", "0");
+    default_setting("NX_AFFINITY", "0");
     // The game asks for 16x anisotropic filtering on its ground and walls; on phone GPUs (Adreno 6xx, Mali-G5x/G7x)
     // every pixel of the 3D pass pays for it. 4x is hard to tell apart at 720p and saves fragment/texture time.
     // NX_MAX_ANISO=16 in config.txt restores the game's own value.
@@ -41,7 +31,6 @@ void game::after_init() {
     // 0 bindings ("bound" always equals "needed"), so it only cost CPU. 0.4.2 did not have it. NX_VERTEX_UPLOAD_RANGES=1
     // turns it back on.
     default_setting("NX_VERTEX_UPLOAD_RANGES", "0");
-    log("p4g: experimental Android profile: pipeline prewarm 1 ms/submit, 32 in flight, 2 workers");
 #endif
 
     log("p4g: runtime initialized");
