@@ -26,6 +26,15 @@ public final class LauncherSettingsTest {
                 new String[] {"720p", "30", "4", "standard", "0"}));
         check(java.util.Arrays.equals(Launcher.presetValues("quality"),
                 new String[] {"1080p", "30", "16", "standard", "-0.5"}));
+        check(Launcher.optionGroup("NX_VIBRATION").equals("controls"));
+        check(Launcher.optionGroup("NX_GAMEPAD_LAYOUT").equals("controls"));
+        check(Launcher.optionGroup("NX_TOUCH_HIDE").equals("controls"));
+        check(Launcher.optionGroup("NX_FSR").equals("graphics"));
+        java.util.Map<String, String> config = new java.util.HashMap<>();
+        Launcher.putResolution(config, "360p");
+        check("640x360".equals(config.get("resolution")));
+        check("640x360".equals(config.get("NX_RENDER_RES")));
+        check("1".equals(config.get("NX_HANDHELD")));
         check(Launcher.DEFAULT_LANDSCAPE);
         System.out.println("Launcher settings tests passed");
     }

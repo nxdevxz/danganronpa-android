@@ -271,13 +271,27 @@ public class Launcher extends Activity {
         if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
-                new String[] {"480p", "720p", "1080p"},
-                new String[] {"480p", "720p", "1080p"},
-                new String[] {"480p", "720p", "1080p"}, 1));
+                new String[] {"360p", "480p", "720p", "1080p"},
+                new String[] {"360p", "480p", "720p", "1080p"},
+                new String[] {"360p", "480p", "720p", "1080p"}, 2));
         options.add(new Option("NX_STRETCH", "Formato da tela", "Screen format",
                 new String[] {"0", "16:10", "1", "hor+"},
                 new String[] {"16:9", "16:10", "Esticar", "Widescreen (Hor+)"},
                 new String[] {"16:9", "16:10", "Stretch", "Widescreen (Hor+)"}, 0));
+        options.add(new Option("NX_FSR", "Super-resolução (FSR)", "Super resolution (FSR)", new String[] {"0", "1"},
+                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
+        options.add(new Option("NX_HUD_1080", "Interface em alta resolução (experimental)", "High-resolution HUD (experimental)",
+                new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
+        options.add(new Option("NX_SHADOWS", "Sombras", "Shadows", new String[] {"0", "1"},
+                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 1));
+        options.add(new Option("NX_MALI_LOW_SHADOWS", "Resolução das sombras", "Shadow resolution",
+                new String[] {"0", "1"}, new String[] {"Original", "Metade (experimental)"},
+                new String[] {"Original", "Half (experimental)"}, 0));
+        options.add(new Option("NX_DISABLE_BLOOM", "Desativar bloom (experimental)", "Disable bloom (experimental)", new String[] {"0", "1"},
+                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
+        options.add(new Option("NX_VIBRATION", "Intensidade da vibração", "Vibration strength",
+                new String[] {"0", "25", "50", "75", "100"}, new String[] {"0%", "25%", "50%", "75%", "100%"},
+                new String[] {"0%", "25%", "50%", "75%", "100%"}, 4));
         options.add(new Option("NX_FPS_CAP", "Limite de FPS", "FPS limit", new String[] {"30", "45", "60"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"},
                 new String[] {"30 FPS", "45 FPS", "60 FPS"}, 0));
@@ -320,6 +334,11 @@ public class Launcher extends Activity {
                 new String[] {"Original", "Sharper", "Sharper (-1, test)"}, 0));
         options.add(new Option("NX_TOUCH_SHOW", "Controles na tela", "On-screen controls", new String[] {"1", "0"},
                 new String[] {"Ativados", "Desativados"}, new String[] {"On", "Off"}, 0));
+        options.add(new Option("NX_TOUCH_HIDE", "Ocultar botões sem desativar o toque", "Hide buttons while keeping touch input",
+                new String[] {"0", "1"}, new String[] {"Não", "Sim"}, new String[] {"No", "Yes"}, 0));
+        options.add(new Option("NX_GAMEPAD_LAYOUT", "Layout do controle físico", "Gamepad layout",
+                new String[] {"0", "1"}, new String[] {"Nintendo (A à direita)", "Xbox (A embaixo)"},
+                new String[] {"Nintendo (A right)", "Xbox (A bottom)"}, 1));
         options.add(new Option("NX_TOUCH_LEFT_STICK_MODE", "Modo do analógico esquerdo", "Left analog mode",
                 new String[] {"fixed", "floating"}, new String[] {"Fixo", "Flutuante"},
                 new String[] {"Fixed", "Floating"}, 0));
@@ -785,7 +804,7 @@ public class Launcher extends Activity {
                 key.equals("NX_MAX_ANISO")) return "quick";
         if (key.equals("NX_TRACE_PERF")) return "logs";
         if (key.equals("NX_SHOW_FPS") || key.startsWith("NX_OVERLAY_")) return "overlay";
-        if (key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
+        if (key.equals("NX_GAMEPAD_LAYOUT") || key.equals("NX_VIBRATION") || key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
         return "graphics";
     }
 
@@ -1225,11 +1244,12 @@ public class Launcher extends Activity {
 
     static void putResolution(Map<String, String> target, String resolution) {
         target.put("RESOLUTION", resolution);
-        if ("480p".equals(resolution)) {
+        if ("360p".equals(resolution) || "480p".equals(resolution)) {
+            String dimensions = "360p".equals(resolution) ? "640x360" : "854x480";
             target.put("NX_HANDHELD", "1");
-            target.put("resolution", "854x480");
-            target.put("NX_RENDER_RES", "854x480");
-            target.put("NX_RES", "480p");
+            target.put("resolution", dimensions);
+            target.put("NX_RENDER_RES", dimensions);
+            target.put("NX_RES", resolution);
         } else if ("1080p".equals(resolution)) {
             target.put("NX_HANDHELD", "0");
             target.put("resolution", "1920x1080");
@@ -1255,7 +1275,7 @@ public class Launcher extends Activity {
         putResolution(config, config.get("RESOLUTION"));
         for (String k : new String[] {"RENDER_SCALE", "NX_ANISO_MAX"}) config.remove(k);
         config.remove("NX_OVERLAY_FRAME_TIME");
-        for (String key : new String[] {"language", "GRAPHICS", "NX_GAMEPAD_LAYOUT"}) config.remove(key);
+        for (String key : new String[] {"language", "GRAPHICS"}) config.remove(key);
         if (writeConfig(new File(dataDir(), "config.txt"), config)) return true;
         tell(t("Erro ao salvar", "Could not save"), t("Verifique o espaço livre e a permissão de armazenamento.",
                 "Check free space and storage permission."));

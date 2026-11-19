@@ -86,6 +86,7 @@ struct PadState {
     uint64_t buttons = 0;  // NpadButton bits
     int32_t lx = 0, ly = 0, rx = 0, ry = 0;
 };
+void rumble(float strength);
 void read_pad(PadState& p);  // player 1
 #ifdef __ANDROID__
 void read_pad_motion(PadState& p);  // read the sticks without consuming touch button transitions

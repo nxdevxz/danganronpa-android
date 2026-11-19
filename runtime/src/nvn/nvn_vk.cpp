@@ -63,6 +63,7 @@ uint32_t g_present_id = 0;
 struct PresentOrigin { uint32_t id = 0; uint64_t origin = 0; };
 PresentOrigin g_present_origins[64];
 std::atomic<uint64_t> g_picture_latency{0};  // ns, smoothed
+ExtendedDrawState g_extended_draw{};
 bool g_dynamic_rendering = true;  // vkCmdBeginRendering (core 1.3); else render pass objects
 bool g_integrated = false;
 bool g_require_sg32 = false;  // compute pipelines are made with a required subgroup size of 32 (Maxwell's warp)  // the chosen GPU is an integrated one (unified memory, the GPU is the long side)
@@ -244,7 +245,30 @@ bool init() {
         dexts.push_back("VK_KHR_portability_subset");
         *tail = &fport, tail = &fport.pNext;
     }
+    const char* dyn_setting = std::getenv("NX_DYNAMIC_STATE");
+    const bool extended = !dyn_setting || dyn_setting[0] != '0';
+    VkPhysicalDeviceExtendedDynamicStateFeaturesEXT eds1{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT};
+    VkPhysicalDeviceExtendedDynamicState2FeaturesEXT eds2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT};
+    VkPhysicalDeviceExtendedDynamicState3FeaturesEXT eds3{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+    if (extended && !v13 && has_extension(dext, VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME)) {
+        dexts.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_EXTENSION_NAME);
+        *tail = &eds1; tail = &eds1.pNext;
+    }
+    if (extended && !v13 && has_extension(dext, VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME)) {
+        dexts.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_2_EXTENSION_NAME);
+        *tail = &eds2; tail = &eds2.pNext;
+    }
+    const char* eds3_setting = std::getenv("NX_EDS3");
+    if (extended && !is_powervr() && (!eds3_setting || eds3_setting[0] != '0') &&
+        has_extension(dext, VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME)) {
+        dexts.push_back(VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
+        *tail = &eds3;
+    }
     p_vkGetPhysicalDeviceFeatures2(g_physical, &features);
+    const auto write_mask_feature = eds3.extendedDynamicState3ColorWriteMask;
+    eds3 = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_3_FEATURES_EXT};
+    eds3.extendedDynamicState3ColorWriteMask = write_mask_feature;
+    eds2.extendedDynamicState2LogicOp = eds2.extendedDynamicState2PatchControlPoints = VK_FALSE;
     {   // The translated shaders assume Maxwell's warp of 32 (TRANSLATOR.md). Intel runs subgroups of 8, 16 or 32 as its
         // compiler chooses; where the size can be pinned (core 1.3 subgroup size control), compute pipelines pin 32.
         VkPhysicalDeviceSubgroupSizeControlProperties sgc{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
@@ -291,6 +315,22 @@ bool init() {
     dci.pNext = &features;
     if (!check(p_create_device(g_physical, &dci, nullptr, &g_device), "vkCreateDevice")) return false;
     p_vkGetDeviceQueue(g_device, g_family, 0, &g_queue);
+    auto device_proc = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
+        reinterpret_cast<PFN_vkGetInstanceProcAddr>(g_gipa)(g_instance, "vkGetDeviceProcAddr"));
+    if (extended && device_proc) {
+        if (v13 || eds1.extendedDynamicState) {
+            g_extended_draw.cull = reinterpret_cast<PFN_vkCmdSetCullMode>(
+                device_proc(g_device, v13 ? "vkCmdSetCullMode" : "vkCmdSetCullModeEXT"));
+            g_extended_draw.front = reinterpret_cast<PFN_vkCmdSetFrontFace>(
+                device_proc(g_device, v13 ? "vkCmdSetFrontFace" : "vkCmdSetFrontFaceEXT"));
+        }
+        if (v13 || eds2.extendedDynamicState2)
+            g_extended_draw.restart = reinterpret_cast<PFN_vkCmdSetPrimitiveRestartEnable>(
+                device_proc(g_device, v13 ? "vkCmdSetPrimitiveRestartEnable" : "vkCmdSetPrimitiveRestartEnableEXT"));
+        if (write_mask_feature)
+            g_extended_draw.write_mask = reinterpret_cast<PFN_vkCmdSetColorWriteMaskEXT>(
+                device_proc(g_device, "vkCmdSetColorWriteMaskEXT"));
+    }
     if (display_timing) {
         auto gdpa = reinterpret_cast<PFN_vkGetDeviceProcAddr>(
             reinterpret_cast<PFN_vkGetInstanceProcAddr>(g_gipa)(g_instance, "vkGetDeviceProcAddr"));
@@ -485,6 +525,7 @@ uint32_t vk_queue_family() { return g_family; }
 bool vk_depth_clip_control() { return g_depth_clip_control; }
 bool vk_indirect_count() { return g_indirect_count; }
 bool vk_list_restart() { return g_list_restart; }
+const ExtendedDrawState& extended_draw_state() { return g_extended_draw; }
 bool vk_dynamic_rendering() { return g_dynamic_rendering; }
 const VkPhysicalDeviceFeatures& vk_features() { return g_features; }
 bool is_xclipse() {

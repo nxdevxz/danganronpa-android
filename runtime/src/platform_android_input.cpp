@@ -257,9 +257,8 @@ constexpr uint64_t kTouchIdleNs = 8'000'000'000;
 
 bool gamepad_swap_abxy() {
     static const bool swap = [] {
-        if (std::strcmp(nx::game::kInfo.id, "p4g") == 0) return true;
         const char* e = std::getenv("NX_GAMEPAD_LAYOUT");
-        return e && std::strcmp(e, "1") == 0;
+        return e ? std::strcmp(e, "1") == 0 : p4g_input();
     }();
     return swap;
 }
@@ -393,6 +392,7 @@ int32_t on_input(android_app* app, AInputEvent* e) {
         uint64_t b = key_to_button(AKeyEvent_getKeyCode(e));
         if (!b) return 0;
         g_gamepad = true;
+        note_controller(AInputEvent_getDeviceId(e));
         if (AKeyEvent_getAction(e) == AKEY_EVENT_ACTION_DOWN)
             g_pad_buttons.buttons |= b;
         else if (AKeyEvent_getAction(e) == AKEY_EVENT_ACTION_UP)
@@ -402,6 +402,7 @@ int32_t on_input(android_app* app, AInputEvent* e) {
     if (type != AINPUT_EVENT_TYPE_MOTION) return 0;
     if ((src & AINPUT_SOURCE_JOYSTICK) == AINPUT_SOURCE_JOYSTICK) {
         g_gamepad = true;
+        note_controller(AInputEvent_getDeviceId(e));
         auto axis = [&](int32_t a) {
             float v = AMotionEvent_getAxisValue(e, a, 0);
             constexpr float kDeadzone = 0.12f;
@@ -634,6 +635,11 @@ void trace_gamepad_left(const PadState& p, uint64_t frame) {
 // The drawn layout's buttons (brighter while pressed) and the stick under the thumb; nothing while a controller is
 // in use or for games without a drawn layout.
 size_t touch_overlay(OverlayShape* out, size_t max) {
+    static const bool hidden = [] {
+        const char* e = std::getenv("NX_TOUCH_HIDE");
+        return e && e[0] == '1';
+    }();
+    if (hidden) return 0;
     size_t n = 0, k = 0;
     const TouchButton* b = touch_buttons(n);
     if (!n && !p4g_input()) return 0;  // P4G may hide every button while keeping the analog ring

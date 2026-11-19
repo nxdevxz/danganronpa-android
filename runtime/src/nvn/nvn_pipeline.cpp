@@ -366,11 +366,18 @@ using PKey = ByteKey<sizeof(PipelineKey)>;
 
 PipelineKey canonical_key(const PipelineKey& in);
 
-void dyn_init(VkDynamicState (&d)[7]) {
+uint32_t dyn_init(VkDynamicState (&d)[11]) {
     const VkDynamicState v[7] = {VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_BLEND_CONSTANTS,
                                  VK_DYNAMIC_STATE_STENCIL_REFERENCE, VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK,
                                  VK_DYNAMIC_STATE_STENCIL_WRITE_MASK, VK_DYNAMIC_STATE_DEPTH_BIAS};
     std::memcpy(d, v, sizeof v);
+    const auto& caps = extended_draw_state();
+    uint32_t count = 7;
+    if (caps.cull) d[count++] = VK_DYNAMIC_STATE_CULL_MODE;
+    if (caps.front) d[count++] = VK_DYNAMIC_STATE_FRONT_FACE;
+    if (caps.restart) d[count++] = VK_DYNAMIC_STATE_PRIMITIVE_RESTART_ENABLE;
+    if (caps.write_mask) d[count++] = VK_DYNAMIC_STATE_COLOR_WRITE_MASK_EXT;
+    return count;
 }
 
 // Everything vkCreateGraphicsPipelines reads, owned (the create info points into this object), so that the compile
@@ -391,7 +398,7 @@ struct PipeBuild {
     VkPipelineDepthStencilStateCreateInfo ds{};
     VkPipelineColorBlendAttachmentState att[8]{};
     VkPipelineColorBlendStateCreateInfo cb{};
-    VkDynamicState dyn[7]{};
+    VkDynamicState dyn[11]{};
     VkPipelineDynamicStateCreateInfo dy{};
     VkFormat color_formats[8]{};
     VkPipelineRenderingCreateInfo ri{};
@@ -777,6 +784,7 @@ PipelineKey canonical_key(const PipelineKey& in) {
     PipelineKey k;
     std::memset(&k, 0, sizeof k);  // compared byte for byte
     k.vs = in.vs, k.fs = in.fs, k.topology = in.topology;
+    k.restart = in.restart;
     uint32_t used_streams = 0, max_loc = 0;
     if (in.vs)
         for (const ShaderIo& io : in.vs->refl.inputs) {
@@ -995,11 +1003,10 @@ std::unique_ptr<PipeBuild> prepare_graphics_pipeline(const PipelineKey& key, con
 
     // Stencil reference and masks and depth bias values come from command-buffer calls (nvn_raster.cpp), so they are
     // dynamic: one pipeline for every value the game uses.
-    VkDynamicState(&dyn)[7] = B.dyn;
-    dyn_init(dyn);
+    auto& dyn = B.dyn;
     VkPipelineDynamicStateCreateInfo& dy = B.dy;
     dy = {VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
-    dy.dynamicStateCount = uint32_t(sizeof dyn / sizeof dyn[0]);
+    dy.dynamicStateCount = dyn_init(dyn);
     dy.pDynamicStates = dyn;
 
     VkPipelineRenderingCreateInfo& ri = B.ri;

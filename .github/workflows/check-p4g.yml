@@ -59,6 +59,8 @@ jobs:
             -std=c++20 -fsyntax-only -I runtime/include -I runtime/src -I "$RUNNER_TEMP/vulkan-headers/include" \
             -I "$ndk/sources/android/native_app_glue" \
             runtime/src/platform_android_audio.cpp runtime/src/platform_android.cpp \
-            runtime/src/nvn/nvn_pipeline.cpp runtime/src/vk_swapchain.cpp
+            runtime/src/platform_android_input.cpp runtime/src/hle_hid.cpp runtime/src/svc_misc.cpp \
+            runtime/src/nvn/nvn_{buffer_cache,draw,frames,image,pipeline,pipeline_cache,present,queue,upload,vk}.cpp \
+            runtime/src/vk_swapchain.cpp
           "$ndk/shader-tools/linux-x86_64/glslc" -O --target-env=vulkan1.0 \
             tools/shaders/present/overlay.frag -o "$RUNNER_TEMP/overlay.spv"

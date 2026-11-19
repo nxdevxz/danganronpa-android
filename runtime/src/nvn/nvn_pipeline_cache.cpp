@@ -10,6 +10,8 @@
 
 #include <atomic>
 #include <mutex>
+#include <future>
+#include <chrono>
 #include <unordered_set>
 
 #include "nvn_pipeline.h"
@@ -58,6 +60,14 @@ VkPipelineCache pipeline_cache() {
         if (n > 0) data.resize(size_t(n)), data.resize(std::fread(data.data(), 1, data.size(), f));
         std::fclose(f);
     }
+    if (!data.empty()) {
+        VkPipelineCacheHeaderVersionOne header{};
+        if (data.size() >= sizeof(header)) std::memcpy(&header, data.data(), sizeof(header));
+        if (header.headerSize < sizeof(header) || header.headerSize > data.size() ||
+            header.headerVersion != VK_PIPELINE_CACHE_HEADER_VERSION_ONE || header.vendorID != p.vendorID ||
+            header.deviceID != p.deviceID || std::memcmp(header.pipelineCacheUUID, p.pipelineCacheUUID, VK_UUID_SIZE))
+            data.clear();
+    }
     VkPipelineCacheCreateInfo ci{VK_STRUCTURE_TYPE_PIPELINE_CACHE_CREATE_INFO};
     ci.initialDataSize = data.size();
     ci.pInitialData = data.empty() ? nullptr : data.data();
@@ -72,16 +82,27 @@ VkPipelineCache pipeline_cache() {
 
 void pipeline_cache_save() {
     if (!g_cache) return;
+    static std::future<size_t> writer;
+    if (writer.valid()) {
+        if (writer.wait_for(std::chrono::seconds(0)) != std::future_status::ready) return;
+        g_saved_size = writer.get();
+    }
     size_t n = 0;
     if (p_vkGetPipelineCacheData(vk_device(), g_cache, &n, nullptr) != VK_SUCCESS || n <= g_saved_size) return;
     std::vector<uint8_t> data(n);
     if (p_vkGetPipelineCacheData(vk_device(), g_cache, &n, data.data()) != VK_SUCCESS) return;
-    std::string tmp = g_path + ".tmp";
-    if (FILE* f = plat::fopen_utf8(tmp, "wb")) {
-        bool ok = std::fwrite(data.data(), 1, n, f) == n;
-        ok = std::fclose(f) == 0 && ok;
-        if (ok && std::rename(tmp.c_str(), g_path.c_str()) == 0) g_saved_size = n;
-    }
+    data.resize(n);
+    writer = std::async(std::launch::async, [path = g_path, bytes = std::move(data), previous = g_saved_size] {
+        plat::set_thread_name("cache-writer");
+        const std::string tmp = path + ".tmp";
+        if (FILE* f = plat::fopen_utf8(tmp, "wb")) {
+            bool ok = std::fwrite(bytes.data(), 1, bytes.size(), f) == bytes.size();
+            ok = std::fclose(f) == 0 && ok;
+            if (ok && std::rename(tmp.c_str(), path.c_str()) == 0) return bytes.size();
+            std::remove(tmp.c_str());
+        }
+        return previous;
+    });
 }
 
 void note_pipeline_created(uint64_t ns, bool worker) {
