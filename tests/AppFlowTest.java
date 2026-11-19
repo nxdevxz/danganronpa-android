@@ -91,6 +91,14 @@ public class AppFlowTest {
         String valid = new String(Files.readAllBytes(manifest.toPath()), "UTF-8");
         text(manifest, valid + "file\t8\textract/romfs/CPK/data.cpk\n"); check(!InstalledGameFiles.ready(root));
         text(manifest, valid); check(InstalledGameFiles.ready(root));
+        InstalledGameFiles.RecentCheck recent = new InstalledGameFiles.RecentCheck();
+        check(recent.ready(root));
+        check(recent.ready(root));
+        text(manifest, valid + "invalid row\n");
+        check(!recent.ready(root));
+        text(manifest, valid);
+        check(recent.ready(root));
+
         // 64-bit sizes: files above 2 GiB must not overflow readiness or require reading all their bytes.
         stage = InstalledGameFiles.begin(root); installationFixture(stage, "large");
         long size = 3L * 1024 * 1024 * 1024 + 1;

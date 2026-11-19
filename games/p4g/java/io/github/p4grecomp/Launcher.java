@@ -34,7 +34,9 @@ import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileReader;
 import java.io.FileOutputStream;
-import java.io.FileWriter;
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -149,20 +151,41 @@ public class Launcher extends Activity {
     boolean directMode() { return prefs().getBoolean("direct_mode", false); }
 
     void addStorageMode(LinearLayout layout) {
-        addRow(layout, t("Modo de preparação", "Setup mode"),
-                directMode() ? t("Rodar pelo NSP/XCI", "Run from NSP/XCI") :
-                        t("Instalar em Android/data", "Install in Android/data"), v -> {
-                    prefs().edit().putBoolean("direct_mode", !directMode()).apply();
-                    refresh();
-                });
+        String[] modes = {t("Instalar em Android/data", "Install in Android/data"),
+                t("Rodar pelo NSP/XCI", "Run from NSP/XCI")};
+        addRow(layout, t("Modo de preparação", "Setup mode"), modes[directMode() ? 1 : 0], v ->
+                new P4gDialog.Builder(this).setTitle(t("Modo de preparação", "Setup mode"))
+                        .setSingleChoiceItems(modes, directMode() ? 1 : 0, (dialog, index) -> {
+                            dialog.dismiss();
+                            boolean direct = index == 1;
+                            if (direct == directMode()) return;
+                            prefs().edit().putBoolean("direct_mode", direct).apply();
+                            installedCheck = new InstalledGameFiles.RecentCheck();
+                            refresh();
+                        }).setNegativeButton(t("Cancelar", "Cancel"), null).show());
     }
 
-    boolean prepared() throws IOException {
-        if (directMode()) return gameUri() != null && gameUri().equals(prefs().getString("direct_ready", ""))
-                && hasKeys() && gameReadable() && updateReadable();
+    boolean launchedGame;
+    volatile InstalledGameFiles.RecentCheck installedCheck = new InstalledGameFiles.RecentCheck();
+
+    void recoverDirectUpdate() {
+        new P4gDialog.Builder(this)
+                .setTitle(t("Atualização não encontrada", "Update not found"))
+                .setMessage(t("Selecione novamente o NSP da atualização ou prepare apenas o jogo base.",
+                        "Select the update NSP again or prepare just the base game."))
+                .setPositiveButton(t("Selecionar novamente", "Select again"), (d, w) -> pick(PICK_UPDATE, "*/*", false))
+                .setNeutralButton(t("Usar só o jogo base", "Use base game only"), (d, w) -> {
+                    prefs().edit().remove("update_uri").remove("update_name").remove("direct_ready").apply();
+                    if (hasAccess() && hasKeys() && gameUri() != null && gameReadable()) prepare();
+                    else refresh();
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null).show();
+    }
+
+    boolean installedReady() throws IOException {
         File installed = installationDir(this);
         InstalledGameFiles.migrate(dataDir(), installed);
-        return InstalledGameFiles.ready(installed);
+        return installedCheck.ready(installed);
     }
 
     String displayName(Uri uri) {
@@ -328,8 +351,13 @@ public class Launcher extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
+        Intent intent = getIntent();
+        if (intent.hasExtra("game_error") || (launchedGame && !intent.getBooleanExtra("returned_to_menu", false)))
+            installedCheck = new InstalledGameFiles.RecentCheck();
+        launchedGame = false;
+        intent.removeExtra("returned_to_menu");
         refresh();
-        showGameError(getIntent());
+        showGameError(intent);
     }
 
     @Override protected void onNewIntent(Intent intent) {
@@ -499,6 +527,7 @@ public class Launcher extends Activity {
         play.setOnClickListener(v -> {
             if (!hasAccess()) askAccess();
             else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
+            else if (directMode() && !updateReadable()) recoverDirectUpdate();
             else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
             else { prefs().edit().remove("p4g_prepared_uri").apply(); prepare(); }
         });
@@ -525,13 +554,13 @@ public class Launcher extends Activity {
         LinearLayout quick = settingsGroup(root, "display", t("Tela e gráficos", "Display and graphics"), "", false);
         LinearLayout controls = settingsGroup(root, "controls", t("Controles", "Controls"), "", false);
         LinearLayout content = settingsGroup(root, "content", t("Jogo, saves e mods", "Game, saves and mods"), "", false);
+        addLauncherSettings(root);
+        LinearLayout overlay = settingsGroup(root, "overlay", t("Monitor de desempenho", "Performance monitor"), "", false);
         LinearLayout support = settingsGroup(root, "more", t("Mais opções", "More options"), "", false);
-        addLauncherSettings(support);
         addRow(quick, t("Predefinição gráfica", "Graphics preset"), t("Escolher", "Choose"), v ->
                 new P4gDialog.Builder(this).setTitle(t("Predefinição gráfica", "Graphics preset"))
                         .setItems(new String[] {t("Desempenho", "Performance"), t("Equilibrado", "Balanced"), t("Qualidade", "Quality")},
                                 (dialog, which) -> applyPreset(new String[] {"performance", "normal", "quality"}[which])).show());
-        LinearLayout overlay = settingsGroup(support, "overlay", t("Monitor de desempenho", "Performance monitor"), "", false);
         addRow(support, t("Perfis salvos", "Saved profiles"), t("Escolher", "Choose"), v ->
                 new P4gDialog.Builder(this).setTitle(t("Perfis salvos", "Saved profiles"))
                         .setItems(new String[] {t("Perfil 1", "Profile 1"), t("Perfil 2", "Profile 2"), t("Perfil 3", "Profile 3")},
@@ -852,6 +881,7 @@ public class Launcher extends Activity {
             i.putExtra(ImportActivity.EXTRA_UPDATE_URI, updateUri());
             i.putExtra(ImportActivity.EXTRA_UPDATE_NAME, updateName());
         }
+        launchedGame = true;
         startActivity(i);
     }
 
@@ -868,17 +898,23 @@ public class Launcher extends Activity {
                     status.setText(t("Verificando os dados instalados…", "Checking or moving installed game data…"));
                 }
             });
-            boolean installedReady = false;
-            String storageProblem = "";
-            try { installedReady = access && prepared(); }
-            catch (Exception e) {
-                storageProblem = String.valueOf(e.getMessage());
-                Log.w("P4G-Launch", "Could not prepare or move installed data", e);
-            }
-            final boolean ready = installedReady;
-            final String storageError = storageProblem;
-            final boolean readable = access && !ready && gameUri() != null && gameReadable();
+            final boolean direct = directMode();
+            final String base = gameUri();
             final boolean keys = hasKeys();
+            final boolean directBaseReadable = access && direct && base != null && gameReadable();
+            final boolean updateMissing = directBaseReadable && !updateReadable();
+            boolean checkedReady = false;
+            String storageProblem = "";
+            try {
+                checkedReady = direct ? directBaseReadable && !updateMissing && keys &&
+                        base.equals(prefs().getString("direct_ready", "")) : access && installedReady();
+            } catch (Exception e) {
+                storageProblem = String.valueOf(e.getMessage());
+                Log.w("P4G-Launch", "Could not check installed game data", e);
+            }
+            final boolean ready = checkedReady;
+            final String storageError = storageProblem;
+            final boolean readable = direct ? directBaseReadable : access && !ready && base != null && gameReadable();
             String preparationError;
             try { preparationError = access ? PreparationFiles.failure(InstalledGameFiles.shaders(installationDir(this))) : ""; }
             catch (Exception e) { preparationError = String.valueOf(e.getMessage()); }
@@ -905,11 +941,12 @@ public class Launcher extends Activity {
                     status.setText(game + "\nprod.keys: " + (keys ? t("selecionado", "selected") : t("não selecionado", "not selected")) +
                         (!access ? t("\nPermita o acesso aos arquivos para preparar o jogo.", "\nAllow file access to prepare the game.") :
                          !readable && gameUri() != null ? t("\nSelecione novamente o arquivo do jogo.", "\nSelect the game file again.") :
+                         updateMissing ? t("\nAtualização não encontrada. Selecione novamente o NSP ou use só o jogo base.", "\nUpdate not found. Select the NSP again or use just the base game.") :
                          readable && keys && directMode() ? t("\nMantenha o arquivo acessível para jogar.", "\nKeep the file accessible to play.") :
                          readable && keys ? t("\nInstale os dados para continuar. Mantenha o NSP/XCI até o fim da instalação.", "\nInstall the game data to continue. Keep the NSP/XCI until installation finishes.") : "") +
                         (storageError.isEmpty() ? "" : "\n" + storageError) +
                         (shaderError.isEmpty() ? "" : t("\nFalha ao gerar shaders:\n", "\nShader generation failed:\n") + shaderError));
-                    play.setText(t("Preparar jogo", "Prepare"));
+                    play.setText(updateMissing ? t("Resolver atualização", "Resolve update") : t("Preparar jogo", "Prepare"));
                 }
             });
         }, "P4G-setup-check").start();
@@ -972,6 +1009,7 @@ public class Launcher extends Activity {
     protected void onActivityResult(int request, int result, Intent data) {
         super.onActivityResult(request, result, data);
         if (request == PREPARE) {
+            installedCheck = new InstalledGameFiles.RecentCheck();
             if (result == RESULT_OK && gameUri() != null) {
                 prefs().edit().putString(directMode() ? "direct_ready" : "p4g_prepared_uri", gameUri()).apply();
                 Log.i("P4G-Launch", "Local game installation complete");
@@ -1172,11 +1210,24 @@ public class Launcher extends Activity {
     }
 
     static boolean writeConfig(File f, Map<String, String> config) {
-        try (FileWriter w = new FileWriter(f)) {
-            for (Map.Entry<String, String> e : config.entrySet()) w.write(e.getKey() + "=" + e.getValue() + "\n");
+        File temp = null;
+        try {
+            temp = File.createTempFile("config-", ".tmp", f.getAbsoluteFile().getParentFile());
+            try (FileOutputStream stream = new FileOutputStream(temp);
+                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8))) {
+                for (Map.Entry<String, String> e : config.entrySet()) {
+                    writer.write(e.getKey() + "=" + e.getValue());
+                    writer.write('\n');
+                }
+                writer.flush();
+                stream.getFD().sync();
+            }
+            Files.move(temp.toPath(), f.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
             return true;
         } catch (Exception e) {
             return false;
+        } finally {
+            if (temp != null) temp.delete();
         }
     }
 

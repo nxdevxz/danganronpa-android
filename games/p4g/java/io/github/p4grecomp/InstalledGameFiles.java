@@ -173,6 +173,29 @@ final class InstalledGameFiles {
         } catch (FileNotFoundException e) { return false; }
     }
 
+    // Per launcher instance. A short-lived successful check can be reused on resume.
+    static final class RecentCheck {
+        private File manifest;
+        private long length, modified, checkedAt;
+        private static final long MAX_AGE_NS = 5L * 60 * 1000000000;
+
+        boolean ready(File root) throws IOException {
+            synchronized (LOCK) {
+                File current = new File(game(root), "installed.tsv");
+                if (current.equals(manifest) && current.length() == length && current.lastModified() == modified
+                        && System.nanoTime() - checkedAt < MAX_AGE_NS && !new File(root, ".game-previous").exists()
+                        && present(root)) return true;
+                manifest = null;
+                if (!InstalledGameFiles.ready(root)) return false;
+                manifest = current;
+                length = current.length();
+                modified = current.lastModified();
+                checkedAt = System.nanoTime();
+                return true;
+            }
+        }
+    }
+
     static boolean ready(File root) throws IOException {
         synchronized (LOCK) { recover(root); return valid(game(root)); }
     }

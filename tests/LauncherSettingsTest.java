@@ -1,7 +1,7 @@
 package io.github.p4grecomp;
 
 public final class LauncherSettingsTest {
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         Launcher.Option option = new Launcher.Option("NX_PIPE_PREWARM_LOAD", "Carga", "Load",
                 new String[] {"light", "standard"}, new String[] {"Leve", "Padrão"},
                 new String[] {"Light", "Standard"}, 1);
@@ -37,6 +37,24 @@ public final class LauncherSettingsTest {
         check("640x360".equals(config.get("resolution")));
         check("640x360".equals(config.get("NX_RENDER_RES")));
         check("1".equals(config.get("NX_HANDHELD")));
+        java.io.File dir = java.nio.file.Files.createTempDirectory("p4g-config").toFile();
+        java.io.File file = new java.io.File(dir, "config.txt");
+        try {
+            config.put("NAME", "Configuração");
+            check(Launcher.writeConfig(file, config));
+            check(Launcher.readConfig(file).equals(config));
+            java.util.Map<String, String> broken = new java.util.LinkedHashMap<String, String>() {
+                @Override public java.util.Set<java.util.Map.Entry<String, String>> entrySet() {
+                    throw new IllegalStateException("interrupted write");
+                }
+            };
+            check(!Launcher.writeConfig(file, broken));
+            check(Launcher.readConfig(file).equals(config));
+            check(dir.list().length == 1);
+        } finally {
+            file.delete();
+            dir.delete();
+        }
         check(Launcher.DEFAULT_LANDSCAPE);
         System.out.println("Launcher settings tests passed");
     }

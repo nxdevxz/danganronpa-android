@@ -105,7 +105,7 @@ public class GameActivity extends NativeActivity {
                         "Exit and return to the launcher? Unsaved progress may be lost."))
                 .setNegativeButton(Lang.t("Cancelar", "Cancel"), null)
                 .setPositiveButton(Lang.t("Sair", "Exit"), (dialog, which) -> {
-                    startActivity(menuIntent());
+                    startActivity(menuIntent().putExtra("returned_to_menu", true));
                     // NativeActivity destruction stops the runtime. Since it is
                     // in :game, the launcher's process and menu stay alive.
                     finish();

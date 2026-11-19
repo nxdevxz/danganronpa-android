@@ -97,10 +97,7 @@ public class ImportActivity extends Activity {
             getIntent().getStringExtra(EXTRA_URI);
 
         if (uriString == null || uriString.isEmpty()) {
-            status.setText(
-                "No game file selected."
-            );
-            fail("No game file selected.");
+            fail(t("Nenhum arquivo do jogo selecionado.", "No game file selected."));
             return;
         }
 
@@ -127,7 +124,7 @@ public class ImportActivity extends Activity {
             new File(getCacheDir(), "import");
 
         if (!ACTIVE.compareAndSet(false, true)) {
-            fail("Another preparation is still finishing. Wait and try again.");
+            fail(t("Outra preparação está terminando. Aguarde e tente novamente.", "Another preparation is still finishing. Wait and try again."));
             return;
         }
         running = true;
@@ -135,8 +132,8 @@ public class ImportActivity extends Activity {
 
 
         status.setText(direct ? t("Verificando o jogo…", "Verifying game…") : updateUri == null
-                ? "Installing base game data... Keep this screen open and allow enough free space."
-                : "Applying the game update over the base game... Keep this screen open and allow enough free space.");
+                ? t("Instalando o jogo base… Mantenha esta tela aberta e reserve espaço livre.", "Installing base game data... Keep this screen open and allow enough free space.")
+                : t("Aplicando a atualização ao jogo base… Mantenha esta tela aberta e reserve espaço livre.", "Applying the game update over the base game... Keep this screen open and allow enough free space."));
 
         new Thread(new Runnable() {
             @Override
@@ -154,10 +151,10 @@ public class ImportActivity extends Activity {
                 ) {
                     if (pfd == null) {
                         throw new IOException(
-                            "Could not open the NSP/XCI"
+                            t("Não foi possível abrir o NSP/XCI do jogo base.", "Could not open the NSP/XCI")
                         );
                     }
-                    if (updateUri != null && updatePfd == null) throw new IOException("Could not open the update NSP");
+                    if (updateUri != null && updatePfd == null) throw new IOException(t("Não foi possível abrir o NSP da atualização.", "Could not open the update NSP"));
                     if (!direct) staged = InstalledGameFiles.begin(data);
 
                     int jobs = Math.max(
@@ -185,7 +182,7 @@ public class ImportActivity extends Activity {
                     } else if (!direct) {
                         InstalledGameFiles.finish(staged);
                         synchronized (commitLock) {
-                            if (cancelRequested) throw new IOException("Preparation cancelled");
+                            if (cancelRequested) throw new IOException(t("Preparação cancelada", "Preparation cancelled"));
                             publishing = true;
                         }
                         InstalledGameFiles.publish(data, staged);
@@ -219,13 +216,13 @@ public class ImportActivity extends Activity {
                         if (cancelRequested) { setResult(RESULT_CANCELED); finish(); return; }
                         if (result == 0) {
                             bar.setProgress(1000);
-                            String complete = direct ? t("Jogo pronto para abrir pelo arquivo.", "Game ready to run from file.") : updateUri == null ? "Game installed." : "Game update installed.";
-                            status.setText(direct ? complete : complete + " The NSP/XCI files are no longer required to play.");
+                            String complete = direct ? t("Jogo pronto para abrir pelo arquivo.", "Game ready to run from file.") : updateUri == null ? t("Jogo instalado.", "Game installed.") : t("Atualização instalada.", "Game update installed.");
+                            status.setText(direct ? complete : complete + t(" Agora você pode jogar usando os dados instalados.", " The NSP/XCI files are no longer required to play."));
                             Toast.makeText(ImportActivity.this, complete, Toast.LENGTH_LONG).show();
                             setResult(RESULT_OK);
                             finish();
                         } else {
-                            fail("Preparation incomplete:\n\n" + message);
+                            fail(t("Preparação incompleta.\n\n", "Preparation incomplete:\n\n") + message);
                         }
                     }
                 });
@@ -268,26 +265,24 @@ public class ImportActivity extends Activity {
                 bar.setProgress(value);
 
                 if (phase == 7) {
-                    status.setText("Checking the local shader compiler...");
+                    status.setText(t("Verificando o compilador de shaders…", "Checking the local shader compiler..."));
                 } else if (phase == 6) {
                     long[] bytes = Importer.bytes();
-                    String sizes = bytes[1] > 0 ? String.format(Locale.US,
-                            "\nRomFS: %.2f / %.2f GB\nRemaining RomFS: %.2f GB; free: %.2f GB\nAdditional space is needed for modules and shaders.",
+                    String sizes = bytes[1] > 0 ? String.format(Locale.getDefault(),
+                            t("\nRomFS: %.2f / %.2f GB\nFaltam %.2f GB de RomFS. Espaço livre: %.2f GB.\nOs módulos e os shaders precisam de espaço adicional.",
+                                    "\nRomFS: %.2f / %.2f GB\nRemaining RomFS: %.2f GB; free: %.2f GB\nAdditional space is needed for modules and shaders."),
                             bytes[0] / 1e9, bytes[1] / 1e9,
                             Math.max(0L, bytes[1] - bytes[0]) / 1e9, data.getUsableSpace() / 1e9) : "";
-                    status.setText("Extracting and checking game data (" + (int) (100 * share) + "%)..." + sizes);
+                    status.setText(t("Extraindo e verificando os dados do jogo", "Extracting and checking game data")
+                            + " (" + (int) (100 * share) + "%)…" + sizes);
                 } else if (phase == 2) {
-                    status.setText(
-                        "Scanning game modules (" +
-                        done + " of " + total + ")..."
-                    );
+                    status.setText(String.format(Locale.getDefault(),
+                            t("Verificando módulos do jogo (%d de %d)…", "Scanning game modules (%d of %d)…"), done, total));
                 } else if (phase == 3) {
-                    status.setText(
-                        "Generating local shaders (module " +
-                        done + " of " + total + ")..."
-                    );
+                    status.setText(String.format(Locale.getDefault(),
+                            t("Gerando shaders locais (módulo %d de %d)…", "Generating local shaders (module %d of %d)…"), done, total));
                 } else if (phase == 4) {
-                    status.setText("Finishing...");
+                    status.setText(t("Finalizando…", "Finishing..."));
                 }
 
                 ui.postDelayed(this, 500);
