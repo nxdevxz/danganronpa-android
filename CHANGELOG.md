@@ -2,20 +2,20 @@
 
 ## 0.5.2 Beta
 
-### Launcher e controles
+### Launcher and controls
 
-- Configurações do launcher e Monitor de desempenho agora têm seções próprias na tela principal.
-- As opções de gráficos e controles abrem listas com os valores disponíveis. O botão Jogar permanece fixo.
-- O menu durante o jogo mantém apenas o ajuste rápido dos controles na tela. O limite de FPS continua disponível no launcher.
-- O port voltou ao renderizador anterior do P4G. Foram retirados os ajustes experimentais de FSR, sombras, bloom e HUD em alta resolução.
+- Launcher settings and Performance monitor now have their own sections on the main screen.
+- Graphics and control settings now show all available choices in a list. The Play button stays visible while you scroll.
+- The in-game quick menu now contains only the on-screen controls toggle. The FPS limit is available in the launcher.
+- Restored the previous P4G renderer and removed the experimental FSR, shadow, bloom, and high-resolution HUD settings.
 
-### Preparação e armazenamento
+### Game setup and storage
 
-- A preparação permite escolher entre instalar em Android/data e jogar diretamente pelo NSP/XCI.
-- Se o arquivo de atualização ficar inacessível no modo direto, é possível selecioná-lo novamente ou preparar apenas o jogo base.
-- A tela de preparação mostra em português o progresso da extração, a geração de shaders e o espaço livre.
+- Choose whether to install the game in `Android/data` or play directly from an NSP or XCI file.
+- If the update file becomes unavailable in direct mode, select it again or prepare the base game on its own.
+- Setup now shows extraction progress, shader generation progress, and available storage in Portuguese when Portuguese is selected.
 
-### Verificação e configurações
+### Installation checks and settings
 
-- Ao voltar ao launcher, uma instalação verificada nos últimos cinco minutos pode passar pela checagem rápida. Alterações no manifesto, preparação ou falha ao abrir o jogo exigem nova verificação completa.
-- O launcher só substitui o arquivo de configurações depois de concluir a gravação, preservando os ajustes anteriores se ela falhar.
+- Returning to the launcher within five minutes of a successful installation check can trigger a quick check. Changes to the installation manifest, a new preparation run, or a launch failure trigger a full check.
+- The launcher replaces the settings file only after the new file has been written successfully. If saving fails, the previous settings are preserved.
