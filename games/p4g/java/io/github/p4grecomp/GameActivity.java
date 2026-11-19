@@ -83,8 +83,6 @@ public class GameActivity extends NativeActivity {
             LinearLayout quick = new LinearLayout(this);
             quick.setOrientation(LinearLayout.VERTICAL);
             P4gTheme.section(quick, Lang.t("Configurações rápidas", "Quick settings"));
-            addQuickSetting(quick, config, Lang.t("Limite de FPS", "FPS limit"), "NX_FPS_CAP",
-                    new String[] {"30", "45", "60"}, "30");
             addQuickSetting(quick, config, Lang.t("Controles na tela", "On-screen controls"), "NX_TOUCH_SHOW",
                     new String[] {"0", "1"}, "1");
             exitDialog = new P4gDialog.Builder(this)
@@ -128,21 +126,20 @@ public class GameActivity extends NativeActivity {
         int selected = 0;
         for (int i = 0; i < values.length; i++) if (values[i].equals(current == null ? fallback : current)) selected = i;
         final int[] index = {selected};
-        value.setText(quickLabel(key, values[index[0]]));
+        value.setText(touchLabel(values[index[0]]));
         value.setOnClickListener(v -> {
             index[0] = (index[0] + 1) % values.length;
             String selectedValue = values[index[0]];
             config.put(key, selectedValue);
-            value.setText(quickLabel(key, selectedValue));
+            value.setText(touchLabel(selectedValue));
             Launcher.writeConfig(new File(Launcher.dataDir(), "config.txt"), config);
         });
         row.addView(value, new LinearLayout.LayoutParams(P4gTheme.dp(this, 126), -2));
         root.addView(row);
     }
 
-    private String quickLabel(String key, String value) {
-        if ("NX_TOUCH_SHOW".equals(key)) return "1".equals(value) ? Lang.t("Ativados", "On") : Lang.t("Desativados", "Off");
-        return value + ("NX_FPS_CAP".equals(key) ? " FPS" : "");
+    private String touchLabel(String value) {
+        return "1".equals(value) ? Lang.t("Ativados", "On") : Lang.t("Desativados", "Off");
     }
     @Override public void onBackPressed() { confirmExit(); }
     @Override public boolean dispatchKeyEvent(KeyEvent event) {
