@@ -1,6 +1,6 @@
 # P4G — Persona 4 Golden for Android
 
-**0.5.1 Beta** · ARM64 · Vulkan · Multilingual app interface
+**0.5.2 Beta** · ARM64 · Vulkan · Multilingual app interface
 
 P4G is an unofficial Android port of the Nintendo Switch version of **Persona 4 Golden**. It uses native ARM64 execution and a compatibility runtime that translates the game's NVN graphics commands to Vulkan.
 
@@ -47,14 +47,10 @@ The runtime accepts the base game (1.0.0, Build ID `C433D980688380A6`) and the o
 2. Install the APK and open **P4G**.
 3. Grant the requested file access permission.
 4. Select the base game's **NSP/XCI** file, your **prod.keys** file and, optionally, the official update **NSP**.
-5. Tap **Prepare** and wait for preparation to finish. When an update is selected, its ExeFS and patched RomFS are installed atomically over the base dump.
-6. To update an existing installation later, open the separate **Game update** section, choose the original base game and update NSP, then tap **Apply update**. The launcher explains why the original container is needed again; a failed or cancelled preparation keeps the previous installation playable.
-6. A **Preparation complete** message appears, and the app returns to the main menu automatically.
-7. Adjust your settings and tap **Play**.
+5. Choose **Install in Android/data** or **Run from NSP/XCI**, then tap **Prepare**.
+6. When preparation finishes, tap **Play**. In direct mode, keep the selected base and update files accessible. If the update moves, select it again or prepare just the base game.
 
-Keep the selected game file available in its original location. The runtime reads it when starting the game.
-
-If preparation data or generated shaders are missing or invalid, the app returns to the preparation screen. Preparation scans the game modules and tests the compiler. Additional shaders are generated on first use, which may briefly pause gameplay. Do not manually copy an old shader pack. See [local shader generation](docs/p4g-local-shaders.md) for details.
+Installed mode extracts the game and translates the shaders it can identify during preparation. In direct mode, shaders are translated on demand. Additional shaders can briefly pause gameplay on first use. See [local shader generation](docs/p4g-local-shaders.md).
 
 ### Updating
 
@@ -64,13 +60,14 @@ Back up your saves before updating. If Android rejects the update, check that bo
 
 ## Main menu
 
+Launcher settings and Performance monitor are accessible from the main screen. During gameplay, the quick menu lets you toggle on-screen controls. The FPS limit is set in the launcher.
+
 | Setting | Purpose |
 |---|---|
 | Output resolution | Select 360p, 480p, 720p or 1080p. |
 | Fullscreen (stretch) | Fill the screen when enabled; preserve the game image's aspect ratio when disabled. |
 | FPS limit | Choose 30 FPS, 45 FPS or the option labeled 60 FPS. |
 | FPS counter | Show or hide the frame-rate counter. |
-| Pipeline prewarming (experimental) | Background is the default. Aggressive waits for every currently available pipeline learned in earlier sessions, trading longer loading for fewer later first-use stalls. Off disables prewarming. First-run pipelines cannot be predicted. |
 | On-screen controls | Show or hide the touch controls. |
 | Button size | Adjust touch button size. |
 | Button opacity | Adjust touch button opacity. |
@@ -78,7 +75,6 @@ Back up your saves before updating. If Android rejects the update, check that bo
 | Touch camera sensitivity | Adjust touch camera sensitivity. |
 | Controls position | Open the touch control layout editor. |
 | Saves | Import or export save backups. |
-| Disable motion blur (experimental) | Off by default. Turn On to disable the matched motion-blur effect. |
 | GPU driver | Import, select and delete saved Turnip or PanVK drivers, or select System driver. |
 | Mods and translations | List installed files, enable or disable mods and inspect file conflicts. |
 | Translation / CPK mod | Import a translation or replacement CPK package. |
