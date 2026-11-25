@@ -1,7 +1,6 @@
-# Tradutor de shaders do projeto
+# Local shader translation
 
-Estas notas descrevem a implementação herdada. A compatibilidade com os shaders de Trigger Happy Havoc ainda precisa de teste.
-
+These notes describe the inherited shader translator. Compatibility with Trigger Happy Havoc shaders still needs testing.
 
 DANGANRONPA no longer needs a preconverted game shader pack in the APK. Its Maxwell translator is built from the pinned MIT Ryubing source (`a82350bb77`, archive SHA-256 checked by the build script). The APK contains the compiler, its license notices, and the port's own presentation/overlay shaders, not the game's translated shader files.
 

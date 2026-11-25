@@ -2,4 +2,4 @@
 
 ## 0.0.1
 
-Primeira versão de desenvolvimento. Pacote Android independente, novo ícone e launcher com a identidade visual de Trigger Happy Havoc. Execução do jogo ainda não testada.
+The first development version adds a separate Android package, a new app icon and a launcher styled after Trigger Happy Havoc. Game boot has yet to be tested.

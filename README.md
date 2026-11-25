@@ -1,11 +1,11 @@
 # Danganronpa Android
 
-Projeto experimental para portar **Danganronpa: Trigger Happy Havoc Anniversary Edition** do Nintendo Switch para Android. A versão **0.0.1** introduz o launcher e o pacote independente `io.github.nxdevxz.danganronpa`.
+An experimental Android port of the Nintendo Switch version of **Danganronpa: Trigger Happy Havoc Anniversary Edition**. Version **0.0.1** introduces the launcher, app icon and data folder. Its Android package, `io.github.nxdevxz.danganronpa`, allows it to be installed alongside P4G Android.
 
-O menu, o ícone e a pasta de dados usam a identidade do Danganronpa. A execução do jogo, o importador e a compatibilidade de saves e shaders ainda precisam de adaptação e teste.
+Game boot, importing game files, save compatibility and shader support still need adaptation and testing.
 
-## Compilação
+## Building the APK
 
-O workflow [Danganronpa Android](.github/workflows/build-danganronpa.yml) gera o artefato `Danganronpa-0.0.1` com `Danganronpa.apk`. A assinatura requer os secrets `DANGANRONPA_SIGNING_KEY_B64` e `DANGANRONPA_SIGNING_PASSWORD` neste repositório. A [verificação de código](.github/workflows/check-danganronpa.yml) roda a cada push e pull request.
+Run the [Danganronpa Android workflow](.github/workflows/build-danganronpa.yml) to build `Danganronpa.apk`. The workflow uses the repository secrets `DANGANRONPA_SIGNING_KEY_B64` and `DANGANRONPA_SIGNING_PASSWORD` for signing. After a successful build, download the `Danganronpa-0.0.1` artifact. [Source checks](.github/workflows/check-danganronpa.yml) run on every push and pull request.
 
-O projeto deriva do [P4G Android](https://github.com/nxdevxz/p4g-android). Consulte [LICENSE](LICENSE) e [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) para licenças e créditos.
+This project is based on [P4G Android](https://github.com/nxdevxz/p4g-android). See the [license](LICENSE) and [third-party notices](THIRD_PARTY_NOTICES.md) for credits and licensing details.
