@@ -22,6 +22,7 @@ struct State {
     uint64_t stage_programs[kStages] = {};
     Range uniforms[kStages][18], storage[kStages][16], vertex_buffers[16];
     uint64_t textures[kStages][32] = {};  // NVN texture handles by sampler binding
+    uint64_t separate_textures[kStages][128] = {}, separate_samplers[kStages][128] = {};
     uint64_t images[kStages][16] = {};    // NVN image handles by image binding (BindImage)
     uint64_t texture_pool = 0, sampler_pool = 0;
     std::vector<VertexAttrib> attribs;

@@ -62,6 +62,28 @@ void bind_deferred(CPU& c) {
 void BindUniformBuffers(CPU& c) { bind_ranges(c, Cmd::BindUniformBuffer); }
 void BindStorageBuffers(CPU& c) { bind_ranges(c, Cmd::BindStorageBuffer); }
 
+template <auto Op>
+void bind_separate(CPU& c) {
+    Cmd cmd{Op};
+    cmd.i[0] = int32_t(c.x[1]);
+    cmd.i[1] = int32_t(c.x[2]);
+    cmd.a[0] = c.x[3];
+    record(c.x[0], cmd);
+}
+
+template <auto Op>
+void bind_separate_array(CPU& c) {
+    const int first = int32_t(c.x[2]), count = int32_t(c.x[3]);
+    if (!c.x[4] || unsigned(first) >= 128) return;
+    for (int k = 0; k < count && first + k < 128; ++k) {
+        Cmd cmd{Op};
+        cmd.i[0] = int32_t(c.x[1]);
+        cmd.i[1] = first + k;
+        cmd.a[0] = ld<uint64_t>(c.x[4] + 8ull * k);
+        record(c.x[0], cmd);
+    }
+}
+
 void BindTextures(CPU& c) {
     int32_t stage = int32_t(c.x[1]), first = int32_t(c.x[2]), count = int32_t(c.x[3]);
     for (int32_t k = 0; k < count && c.x[4]; k++) {
@@ -176,6 +198,10 @@ NX_HLE("nvnCommandBufferBindUniformBuffers", BindUniformBuffers);
 NX_HLE("nvnCommandBufferBindUniformBuffersDeferred", bind_deferred<2>);
 NX_HLE("nvnCommandBufferBindStorageBuffers", BindStorageBuffers);
 NX_HLE("nvnCommandBufferBindStorageBuffersDeferred", bind_deferred<3>);
+NX_HLE("nvnCommandBufferBindSeparateTexture", bind_separate<Cmd::BindSeparateTexture>);
+NX_HLE("nvnCommandBufferBindSeparateSampler", bind_separate<Cmd::BindSeparateSampler>);
+NX_HLE("nvnCommandBufferBindSeparateTextures", bind_separate_array<Cmd::BindSeparateTexture>);
+NX_HLE("nvnCommandBufferBindSeparateSamplers", bind_separate_array<Cmd::BindSeparateSampler>);
 NX_HLE("nvnCommandBufferBindTextures", BindTextures);
 NX_HLE("nvnCommandBufferBindTexturesDeferred", bind_deferred<0>);
 NX_HLE("nvnCommandBufferBindVertexBuffers", BindVertexBuffers);

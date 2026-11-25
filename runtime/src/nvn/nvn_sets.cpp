@@ -47,6 +47,15 @@ int api_stage(ShaderStage s) { return s == ShaderStage::Fragment ? 1 : s == Shad
 // word offsets into one handle (Ryujinx TextureHandle.PackSlots / PackOffsets).
 uint32_t texture_word(int stage, uint32_t bank, uint32_t word) {
     if (bank == 2) {
+        // Separate resources occupy two consecutive tables of 8-byte handles in c[2].
+        constexpr uint32_t textures = 0x168 / 4, samplers = 0x568 / 4;
+        if (word >= textures) {
+            const bool sampler = word >= samplers;
+            const auto& table = sampler ? g_state.separate_samplers[stage] : g_state.separate_textures[stage];
+            const uint32_t index = (word - (sampler ? samplers : textures)) / 2;
+            if (index >= std::size(table)) return 0;
+            return uint32_t(table[index] >> (32 * (word & 1)));
+        }
         if (word < 8 || (word - 8) / 2 >= std::size(g_state.textures[stage])) return 0;
         const uint64_t binding = g_state.textures[stage][(word - 8) / 2];
         return uint32_t(binding >> (32 * (word & 1)));
@@ -735,7 +744,7 @@ uint32_t gather_textures(const std::vector<const ShaderInfo*>& shaders) {
         uint64_t handle = 0;
         if (b->nvn.source == NvnSource::SamplerBinding && b->nvn.index >= 0 && b->nvn.index < 32)
             handle = g_state.textures[st][b->nvn.index];
-        else if (b->nvn.source == NvnSource::HandleInUniform || (b->nvn.bank == 2 && b->nvn.word >= (1 << 28)))
+        else if (b->nvn.source == NvnSource::HandleInUniform || (b->nvn.bank == 2 && b->nvn.word >= 0x168 / 4))
             handle = shader_texture_handle(st, b->nvn);
         t.handles[k] = handle;
         ResolvedTexture& r = t.resolved[k];

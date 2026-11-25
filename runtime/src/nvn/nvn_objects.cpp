@@ -665,6 +665,8 @@ void DescriptorPoolGetSize(CPU& c) {
 
 // nvnDeviceGetTextureHandle(device, int textureID, int samplerID): Maxwell's bindless handle, texture id in the
 // low 20 bits and sampler id above (what the shaders' TEX instructions decode). Texel fetch: the texture id alone.
+void DeviceGetSeparateTextureHandle(CPU& c) { c.x[0] = c.x[1] & 0xfffff; }
+void DeviceGetSeparateSamplerHandle(CPU& c) { c.x[0] = (c.x[1] & 0xfff) << 20; }
 void DeviceGetTextureHandle(CPU& c) { c.x[0] = (c.x[1] & 0xFFFFF) | ((c.x[2] & 0xFFF) << 20); }
 void DeviceGetTexelFetchHandle(CPU& c) { c.x[0] = c.x[1] & 0xFFFFF; }
 void DeviceGetImageHandle(CPU& c) { c.x[0] = c.x[1] & 0xFFFFF; }
@@ -719,6 +721,8 @@ NX_HLE("nvnSamplerPoolGetMemoryOffset", DescriptorPoolGetMemoryOffset);
 NX_HLE("nvnTexturePoolGetMemoryOffset", DescriptorPoolGetMemoryOffset);
 NX_HLE("nvnSamplerPoolGetSize", DescriptorPoolGetSize);
 NX_HLE("nvnTexturePoolGetSize", DescriptorPoolGetSize);
+NX_HLE("nvnDeviceGetSeparateTextureHandle", DeviceGetSeparateTextureHandle);
+NX_HLE("nvnDeviceGetSeparateSamplerHandle", DeviceGetSeparateSamplerHandle);
 NX_HLE("nvnDeviceGetTextureHandle", DeviceGetTextureHandle);
 NX_HLE("nvnDeviceGetTexelFetchHandle", DeviceGetTexelFetchHandle);
 NX_HLE("nvnDeviceGetImageHandle", DeviceGetImageHandle);
