@@ -37,6 +37,8 @@ extern std::atomic<uint64_t> g_tick_calls, g_yield_calls, g_sleep_calls;
 }
 namespace nx::nvn {
 
+std::atomic<uint64_t> acquired_color_texture{0};
+
 extern std::atomic<uint64_t> g_linear_uploads;  // nvn_upload.cpp
 
 // A film's cadence as shown: per present, whether a new picture went up (a large pitch-linear upload since the last
@@ -320,7 +322,12 @@ void WindowInitialize(CPU& c) {  // NVNboolean (NVNwindow*, const NVNwindowBuild
     c.x[0] = 1;
 }
 
-void WindowFinalize(CPU& c) { destroy(c.x[0]); }
+void WindowFinalize(CPU& c) {
+    if (auto* window = get<Window>(c.x[0]))
+        for (uint64_t texture : window->textures)
+            acquired_color_texture.compare_exchange_strong(texture, 0);
+    destroy(c.x[0]);
+}
 
 // NVNwindowAcquireTextureResult (NVNwindow*, NVNsync* textureAvailableSync, int* textureIndex)
 void WindowAcquireTexture(CPU& c) {
@@ -328,6 +335,7 @@ void WindowAcquireTexture(CPU& c) {
     int index = 0;
     if (w && w->active > 0) {
         index = w->next;
+        acquired_color_texture.store(w->textures[index]);
         w->next = (w->next + 1) % w->active;
     }
     if (c.x[2]) st<int32_t>(c.x[2], index);

@@ -229,6 +229,8 @@ struct Texture : Object {
     ~Texture();  // nvn_vk.cpp: the image is freed once the GPU is done with it
 };
 
+extern std::atomic<uint64_t> acquired_color_texture;
+
 struct Window : Object {
     std::vector<uint64_t> textures;  // guest NVNtexture*
     int active = 0, next = 0, interval = 1;

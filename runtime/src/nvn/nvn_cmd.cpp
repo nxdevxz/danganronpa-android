@@ -16,6 +16,7 @@
 #include <map>
 #include <unordered_map>
 
+#include <nx/game.h>
 #include "nvn.h"
 #include "nvn_shaders.h"
 
@@ -364,6 +365,19 @@ void SetRenderTargets(CPU& c) {
     cmd.n = n;
     for (uint32_t k = 0; k < n && c.x[2]; k++) cmd.a[k] = ld<uint64_t>(c.x[2] + 8 * k);
     cmd.a[8] = c.x[4];  // depth/stencil
+    // Unity records its screen draws against a proxy that has no NVN texture
+    // object. Capture the acquired image now, before replay moves to another frame.
+    if (std::strcmp(game::kInfo.id, "danganronpa") == 0 && n == 1 && cmd.a[0] && cmd.a[8] &&
+        !get<Texture>(cmd.a[0])) {
+        const uint64_t acquired = acquired_color_texture.load();
+        if (acquired && get<Texture>(acquired)) {
+            static std::atomic<bool> reported{false};
+            if (!reported.exchange(true))
+                log("nvn: routing Unity screen target %llx to acquired texture %llx",
+                    (unsigned long long)cmd.a[0], (unsigned long long)acquired);
+            cmd.a[0] = acquired;
+        }
+    }
     // The views pick the level and layer rendered to (a bloom chain renders each mip of one texture in turn).
     TargetViews tv;
     for (uint32_t k = 0; k < n && c.x[3]; k++) {
