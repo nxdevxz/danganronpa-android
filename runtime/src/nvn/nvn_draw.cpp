@@ -616,6 +616,29 @@ bool danganronpa_motion_blur_skipped(const Targets& t, bool indexed, const Cmd& 
     return true;
 }
 
+// Remember the latest Unity blit until the queued present consumes it. Unity can
+// draw through a guest target for which replay has no color attachment. In that
+// case its single sampled input still names the previous pass's rendered image.
+void remember_unity_blit(const Targets& targets, const ShaderInfo& vertex, const ShaderInfo* fragment) {
+    static const bool enabled = std::strcmp(game::kInfo.id, "danganronpa") == 0;
+    if (!enabled || !fragment || vertex.hash != "682752fe4552b2a4" || fragment->hash != "724b91d788fb0f23")
+        return;
+    g_last_composite = {};
+    if (targets.color_count && !targets.views.level[0] && !targets.views.layer[0]) {
+        auto* target = get<Texture>(targets.colors[0]);
+        if (target && target->image && target->image.get() == g_pass_images[0]) {
+            g_last_composite = {targets.colors[0], target->image};
+            return;
+        }
+    }
+    if (g_textures.resolved.size() != 1) return;
+    const auto& binding = g_textures.resolved.front();
+    if (!binding.texture || binding.view.base_level || binding.view.min_layer) return;
+    auto* input = get<Texture>(binding.texture);
+    if (input && input->image && input->image->rendered)
+        g_last_composite = {binding.texture, input->image};
+}
+
 bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, const Cmd& c) {
     g_stats.total++;
     if (g_state.rasterizer_discard || !g_state.render_enable) return false;  // nothing reaches the targets
@@ -970,20 +993,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
         if (q) zero_draws_end(cb);
     }
     g_stats.done++;
-    // Unity's startup frame ends with this textured blit. Earlier draws with the
-    // same shaders target intermediate surfaces, so remember only the final draw.
-    static const bool track_composite = std::strcmp(game::kInfo.id, "danganronpa") == 0;
-    if (track_composite) {
-        const bool composite = t.color_count > 0 && !t.views.level[0] && !t.views.layer[0] && fs &&
-                               vs->hash == "682752fe4552b2a4" && fs->hash == "724b91d788fb0f23";
-        g_last_composite = {};
-        if (composite) {
-            // Resolve at the submit's object-generation mark. Unity can recycle the
-            // guest texture address before the queued present reaches the GPU worker.
-            if (auto* target = get<Texture>(t.colors[0]); target && target->image.get() == g_pass_images[0])
-                g_last_composite = {t.colors[0], target->image};
-        }
-    }
+    remember_unity_blit(t, *vs, fs);
     if (g_pass_draws++ == 0 && (exp_render_pass() & 4)) pass_end_only(cb, 9);  // NX_EXP_RP split: one more store and load
     if (gpu_profile_on())
         gpu_profile_count(0, uint64_t(uint32_t(indexed ? c.i[0] : c.i[1])) * uint64_t(std::max(1, c.i[3])));
