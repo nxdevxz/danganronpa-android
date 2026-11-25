@@ -1,13 +1,13 @@
 
-#include "p4g_cpk.h"
-#include "p4g_gxp.h"
+#include "danganronpa_cpk.h"
+#include "danganronpa_gxp.h"
 
 #include <cstring>
 #include <limits>
 #include <vector>
 #include <map>
 
-namespace p4g {
+namespace danganronpa {
 
 namespace {
 
@@ -437,7 +437,7 @@ bool unpack_crilayla(
     output.clear();
     if (input.size() < 0x110 ||
         std::memcmp(input.data(), "CRILAYLA", 8) != 0) {
-        error = "P4G: missing CRILAYLA header";
+        error = "DANGANRONPA: missing CRILAYLA header";
         return false;
     }
 
@@ -447,7 +447,7 @@ bool unpack_crilayla(
     if (total != expected_size || total > MAX_SHADER_BYTES ||
         compressed_body > input.size() - 0x110 ||
         compressed_body + 0x110 != input.size()) {
-        error = "P4G: inconsistent CRILAYLA sizes";
+        error = "DANGANRONPA: inconsistent CRILAYLA sizes";
         return false;
     }
 
@@ -462,13 +462,13 @@ bool unpack_crilayla(
     while (write > 0x100) {
         uint32_t flag = 0;
         if (!bits.get(1, flag)) {
-            error = "P4G: truncated CRILAYLA stream";
+            error = "DANGANRONPA: truncated CRILAYLA stream";
             return false;
         }
         if (!flag) {
             uint32_t literal = 0;
             if (!bits.get(8, literal)) {
-                error = "P4G: truncated CRILAYLA literal";
+                error = "DANGANRONPA: truncated CRILAYLA literal";
                 return false;
             }
             output[--write] = static_cast<uint8_t>(literal);
@@ -477,7 +477,7 @@ bool unpack_crilayla(
 
         uint32_t distance_bits = 0;
         if (!bits.get(13, distance_bits)) {
-            error = "P4G: truncated CRILAYLA reference";
+            error = "DANGANRONPA: truncated CRILAYLA reference";
             return false;
         }
         const size_t distance = static_cast<size_t>(distance_bits) + 3;
@@ -486,7 +486,7 @@ bool unpack_crilayla(
         for (unsigned width : widths) {
             uint32_t part = 0;
             if (!bits.get(width, part)) {
-                error = "P4G: truncated CRILAYLA length";
+                error = "DANGANRONPA: truncated CRILAYLA length";
                 return false;
             }
             length += part;
@@ -499,12 +499,12 @@ bool unpack_crilayla(
             uint32_t part = 0;
             do {
                 if (!bits.get(8, part)) {
-                    error = "P4G: truncated CRILAYLA extension";
+                    error = "DANGANRONPA: truncated CRILAYLA extension";
                     return false;
                 }
                 length += part;
                 if (length > output.size()) {
-                    error = "P4G: invalid CRILAYLA length";
+                    error = "DANGANRONPA: invalid CRILAYLA length";
                     return false;
                 }
             } while (part == 255);
@@ -512,14 +512,14 @@ bool unpack_crilayla(
 
         if (length > write - 0x100 ||
             distance > output.size() - write) {
-            error = "P4G: CRILAYLA reference out of bounds";
+            error = "DANGANRONPA: CRILAYLA reference out of bounds";
             return false;
         }
         for (uint64_t j = 0; j < length; ++j) {
             const size_t dest = --write;
             const size_t source = dest + distance;
             if (source >= output.size()) {
-                error = "P4G: invalid CRILAYLA source";
+                error = "DANGANRONPA: invalid CRILAYLA source";
                 return false;
             }
             output[dest] = output[source];
@@ -560,7 +560,7 @@ bool list_cpk_files(
     }
 
     if (columns.empty()) {
-        error = "P4G: no UTF column found";
+        error = "DANGANRONPA: no UTF column found";
         return false;
     }
 
@@ -683,7 +683,7 @@ bool list_cpk_files(
     }
 
     if (toc_columns.empty()) {
-        error = "P4G: no column found in TOC";
+        error = "DANGANRONPA: no column found in TOC";
         return false;
     }
 
@@ -692,7 +692,7 @@ bool list_cpk_files(
 
     // Etapas 61.36-61.40: percorrer o TOC e verificar os seis shaders.
     if (file_count == 0) {
-        error = "P4G: empty TOC";
+        error = "DANGANRONPA: empty TOC";
         return false;
     }
 
@@ -707,7 +707,7 @@ bool list_cpk_files(
         toc_row_size == 0 ||
         uint64_t(file_count) >
             (toc_data.size() - toc_row_start) / toc_row_size) {
-        error = "P4G: TOC rows out of bounds";
+        error = "DANGANRONPA: TOC rows out of bounds";
         return false;
     }
 
@@ -746,14 +746,14 @@ bool list_cpk_files(
         for (const auto& col : toc_columns) {
             const size_t n = utf_value_size(col.type);
             if (n == 0) {
-                error = "P4G: unknown TOC column type";
+                error = "DANGANRONPA: unknown TOC column type";
                 return false;
             }
 
             size_t value_pos = 0;
             if (col.storage == 0x50) {
                 if (cursor > row_end || n > row_end - cursor) {
-                    error = "P4G: truncated TOC row: " + std::to_string(row);
+                    error = "DANGANRONPA: truncated TOC row: " + std::to_string(row);
                     return false;
                 }
                 value_pos = cursor;
@@ -763,7 +763,7 @@ bool list_cpk_files(
             } else if (col.storage == 0x10) {
                 continue;
             } else {
-                error = "P4G: unknown TOC storage";
+                error = "DANGANRONPA: unknown TOC storage";
                 return false;
             }
 
@@ -771,7 +771,7 @@ bool list_cpk_files(
                 if (col.type != 0xA ||
                     value_pos > toc_data.size() ||
                     4 > toc_data.size() - value_pos) {
-                    error = "P4G: invalid name field in TOC";
+                    error = "DANGANRONPA: invalid name field in TOC";
                     return false;
                 }
                 const uint32_t str_offset =
@@ -779,7 +779,7 @@ bool list_cpk_files(
                 std::string value;
                 if (!read_utf_string(
                         toc_data, strings_offset, str_offset, value)) {
-                    error = "P4G: invalid string in row " +
+                    error = "DANGANRONPA: invalid string in row " +
                             std::to_string(row);
                     return false;
                 }
@@ -795,7 +795,7 @@ bool list_cpk_files(
                 uint64_t value = 0;
                 if (!read_utf_integer(
                         toc_data, value_pos, col.type, value)) {
-                    error = "P4G: invalid numeric value in row " +
+                    error = "DANGANRONPA: invalid numeric value in row " +
                             std::to_string(row);
                     return false;
                 }
@@ -830,18 +830,18 @@ bool list_cpk_files(
             continue;
         }
         if (!has_offset || !has_size || !has_extract_size) {
-            error = "P4G: incomplete metadata: " + file_name;
+            error = "DANGANRONPA: incomplete metadata: " + file_name;
             return false;
         }
         if (file_offset > cpk.size - file_base ||
             file_size > cpk.size - file_base - file_offset) {
-            error = "P4G: offset/size outside CPK: " + file_name;
+            error = "DANGANRONPA: offset/size outside CPK: " + file_name;
             return false;
         }
 
         if (file_size == 0 || file_size > MAX_SHADER_BYTES ||
             extract_size == 0 || extract_size > MAX_SHADER_BYTES) {
-            error = "P4G: invalid size: " + file_name;
+            error = "DANGANRONPA: invalid size: " + file_name;
             return false;
         }
 
@@ -856,7 +856,7 @@ bool list_cpk_files(
     }
 
     if (found_count != target_count) {
-        error = "P4G: shaders found " +
+        error = "DANGANRONPA: shaders found " +
                 std::to_string(found_count) + "/6. Missing:";
         for (size_t i = 0; i < target_count; ++i) {
             if (!found[i]) {
@@ -887,13 +887,13 @@ bool read_cpk_file(
         file.extract_size > MAX_SHADER_BYTES ||
         file.offset > cpk.size ||
         file.size > cpk.size - file.offset) {
-        error = "P4G: invalid size/offset: " + file.path;
+        error = "DANGANRONPA: invalid size/offset: " + file.path;
         return false;
     }
 
     std::vector<uint8_t> packed(static_cast<size_t>(file.size));
     if (game.read(cpk, file.offset, packed.data(), file.size) != file.size) {
-        error = "P4G: could not read " + file.path;
+        error = "DANGANRONPA: could not read " + file.path;
         return false;
     }
 
@@ -905,16 +905,16 @@ bool read_cpk_file(
     } else if (file.extract_size == file.size) {
         output.swap(packed);
     } else {
-        error = "P4G: inconsistent sizes: " + file.path;
+        error = "DANGANRONPA: inconsistent sizes: " + file.path;
         return false;
     }
 
     if (output.size() != file.extract_size) {
         output.clear();
-        error = "P4G: invalid decompressed size: " + file.path;
+        error = "DANGANRONPA: invalid decompressed size: " + file.path;
         return false;
     }
     return true;
 }
 
-} // namespace p4g
+} // namespace danganronpa

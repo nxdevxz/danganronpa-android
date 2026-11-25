@@ -3,8 +3,6 @@ name: Danganronpa Android
 
 on:
   workflow_dispatch:
-  push:
-    branches: [perf/chakeyy-nvn-p4g]
 
 permissions:
   contents: read
@@ -31,18 +29,18 @@ jobs:
           "$RUNNER_TEMP/android-surface-size-test"
           c++ -std=c++17 -Wall -Wextra -Werror -I runtime/src tests/input_stick_test.cpp -o "$RUNNER_TEMP/input-stick-test"
           "$RUNNER_TEMP/input-stick-test"
-          c++ -std=c++17 -Wall -Wextra -Werror -I games/p4g/import tests/p4g_maxwell_test.cpp -o "$RUNNER_TEMP/p4g-maxwell-test"
-          "$RUNNER_TEMP/p4g-maxwell-test"
+          c++ -std=c++17 -Wall -Wextra -Werror -I games/danganronpa/import tests/danganronpa_maxwell_test.cpp -o "$RUNNER_TEMP/danganronpa-maxwell-test"
+          "$RUNNER_TEMP/danganronpa-maxwell-test"
 
       - name: Verify Danganronpa files
         shell: bash
         run: |
           set -euo pipefail
 
-          test -f games/p4g/game.cpp
-          test -f games/p4g/AndroidManifest.xml
-          test -f games/p4g/import/p4g_import_jni.cpp
-          test -f games/p4g/import/p4g_shaders.cpp
+          test -f games/danganronpa/game.cpp
+          test -f games/danganronpa/AndroidManifest.xml
+          test -f games/danganronpa/import/danganronpa_import_jni.cpp
+          test -f games/danganronpa/import/danganronpa_shaders.cpp
 
           echo "Danganronpa source files found."
 
@@ -120,7 +118,7 @@ jobs:
           sudo apt-get install -y -qq patch zlib1g-dev spirv-tools
           echo "::endgroup::"
           echo "Starting the Maxwell translator build at $(date -u +%FT%TZ)"
-          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash tools/maxwell/build_p4g_translator.sh
+          ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358" bash tools/maxwell/build_danganronpa_translator.sh
           echo "Finished the Maxwell translator build at $(date -u +%FT%TZ)"
 
       - name: Verify Maxwell translator output
@@ -140,7 +138,7 @@ jobs:
           NDK="$ANDROID_HOME/ndk/28.2.13676358"
 
           cmake -S . \
-            -B build-p4g \
+            -B build-danganronpa \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$NDK/build/cmake/android.toolchain.cmake" \
@@ -148,13 +146,13 @@ jobs:
             -DANDROID_PLATFORM=android-29 \
             -DANDROID_STL=c++_shared \
             -DNX_VULKAN_SDK="$GITHUB_WORKSPACE/vulkan-headers" \
-            -DNX_GAME=p4g \
+            -DNX_GAME=danganronpa \
             -DNX_NCE=ON \
             -DNX_ANDROID_THIN_LTO=ON
 
           echo "Danganronpa ARM64 configuration ready."
 
-          grep -q -- "-flto=thin" build-p4g/build.ninja
+          grep -q -- "-flto=thin" build-danganronpa/build.ninja
           echo "Danganronpa ThinLTO flags verified."
 
       - name: Build Danganronpa native library
@@ -162,11 +160,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          cmake --build build-p4g \
-            --target p4g \
+          cmake --build build-danganronpa \
+            --target danganronpa \
             --parallel 2
 
-          test -s build-p4g/libp4g.so
+          test -s build-danganronpa/libdanganronpa.so
 
           echo "Danganronpa native library built."
 
@@ -175,11 +173,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          cmake --build build-p4g \
-            --target p4gimport \
+          cmake --build build-danganronpa \
+            --target danganronpaimport \
             --parallel 2
 
-          test -s build-p4g/libp4gimport.so
+          test -s build-danganronpa/libdanganronpaimport.so
 
           echo "Danganronpa importer built."
 
@@ -188,12 +186,12 @@ jobs:
         with:
           name: danganronpa-android-arm64-libs
           path: |
-            build-p4g/libp4g.so
-            build-p4g/libp4gimport.so
-            build-p4g/adrenotools/src/hook/libhook_impl.so
-            build-p4g/adrenotools/src/hook/libmain_hook.so
-            build-p4g/adrenotools/src/hook/libfile_redirect_hook.so
-            build-p4g/adrenotools/src/hook/libgsl_alloc_hook.so
+            build-danganronpa/libdanganronpa.so
+            build-danganronpa/libdanganronpaimport.so
+            build-danganronpa/adrenotools/src/hook/libhook_impl.so
+            build-danganronpa/adrenotools/src/hook/libmain_hook.so
+            build-danganronpa/adrenotools/src/hook/libfile_redirect_hook.so
+            build-danganronpa/adrenotools/src/hook/libgsl_alloc_hook.so
             build-apk/shader-libs/libspirvharness.so
             build-apk/shader-libs/libc++_shared.so
           if-no-files-found: error
@@ -210,12 +208,12 @@ jobs:
           test -x "$LLVM_READELF"
 
           libraries=(
-            build-p4g/libp4g.so
-            build-p4g/libp4gimport.so
-            build-p4g/adrenotools/src/hook/libhook_impl.so
-            build-p4g/adrenotools/src/hook/libmain_hook.so
-            build-p4g/adrenotools/src/hook/libfile_redirect_hook.so
-            build-p4g/adrenotools/src/hook/libgsl_alloc_hook.so
+            build-danganronpa/libdanganronpa.so
+            build-danganronpa/libdanganronpaimport.so
+            build-danganronpa/adrenotools/src/hook/libhook_impl.so
+            build-danganronpa/adrenotools/src/hook/libmain_hook.so
+            build-danganronpa/adrenotools/src/hook/libfile_redirect_hook.so
+            build-danganronpa/adrenotools/src/hook/libgsl_alloc_hook.so
             build-apk/shader-libs/libspirvharness.so
             build-apk/shader-libs/libc++_shared.so
           )
@@ -252,7 +250,7 @@ jobs:
 
           mkdir -p build-java/classes
 
-          find games/p4g/java \
+          find games/danganronpa/java \
             -name "*.java" \
             > build-java/sources.txt
 
@@ -324,7 +322,7 @@ jobs:
           "$AAPT2" link \
             -o build-apk/base.apk \
             -I "$ANDROID_JAR" \
-            --manifest games/p4g/AndroidManifest.xml \
+            --manifest games/danganronpa/AndroidManifest.xml \
             build-apk/resources.zip
 
           test -s build-apk/base.apk
@@ -346,11 +344,11 @@ jobs:
               "classes.dex":
                   "build-java/dex/classes.dex",
 
-              "lib/arm64-v8a/libp4g.so":
-                  "build-p4g/libp4g.so",
+              "lib/arm64-v8a/libdanganronpa.so":
+                  "build-danganronpa/libdanganronpa.so",
 
-              "lib/arm64-v8a/libp4gimport.so":
-                  "build-p4g/libp4gimport.so",
+              "lib/arm64-v8a/libdanganronpaimport.so":
+                  "build-danganronpa/libdanganronpaimport.so",
 
               "lib/arm64-v8a/libspirvharness.so":
                   "build-apk/shader-libs/libspirvharness.so",
@@ -360,7 +358,7 @@ jobs:
           }
 
           for hook in ("hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook"):
-              files[f"lib/arm64-v8a/lib{hook}.so"] = f"build-p4g/adrenotools/src/hook/lib{hook}.so"
+              files[f"lib/arm64-v8a/lib{hook}.so"] = f"build-danganronpa/adrenotools/src/hook/lib{hook}.so"
           files["assets/licenses/libadrenotools.txt"] = "third_party/libadrenotools/LICENSE"
           files["assets/licenses/linkernsbypass.txt"] = "third_party/libadrenotools/lib/linkernsbypass/LICENSE"
 
@@ -425,8 +423,8 @@ jobs:
 
           required = [
               "classes.dex",
-              "lib/arm64-v8a/libp4g.so",
-              "lib/arm64-v8a/libp4gimport.so",
+              "lib/arm64-v8a/libdanganronpa.so",
+              "lib/arm64-v8a/libdanganronpaimport.so",
               "lib/arm64-v8a/libhook_impl.so",
               "lib/arm64-v8a/libmain_hook.so",
               "lib/arm64-v8a/libfile_redirect_hook.so",
@@ -442,7 +440,7 @@ jobs:
 
           with zipfile.ZipFile(apk) as z:
               names = z.namelist()
-              if any(n.startswith("assets/spirv/") or n.endswith(".spv") or n.endswith("libp4gshader.so") for n in names):
+              if any(n.startswith("assets/spirv/") or n.endswith(".spv") or n.endswith("libdanganronpashader.so") for n in names):
                   raise RuntimeError("APK contains bundled game shaders or the obsolete GXP converter")
 
               for name in required:
@@ -474,13 +472,13 @@ jobs:
       - name: Sign Danganronpa APK
         shell: bash
         env:
-          P4G_SIGNING_KEY_B64: ${{ secrets.P4G_SIGNING_KEY_B64 }}
-          P4G_SIGNING_PASSWORD: ${{ secrets.P4G_SIGNING_PASSWORD }}
+          DANGANRONPA_SIGNING_KEY_B64: ${{ secrets.DANGANRONPA_SIGNING_KEY_B64 }}
+          DANGANRONPA_SIGNING_PASSWORD: ${{ secrets.DANGANRONPA_SIGNING_PASSWORD }}
         run: |
           set -euo pipefail
 
-          if [ -z "$P4G_SIGNING_KEY_B64" ] || [ -z "$P4G_SIGNING_PASSWORD" ]; then
-            echo "Configure repository secrets P4G_SIGNING_KEY_B64 and P4G_SIGNING_PASSWORD."
+          if [ -z "$DANGANRONPA_SIGNING_KEY_B64" ] || [ -z "$DANGANRONPA_SIGNING_PASSWORD" ]; then
+            echo "Configure repository secrets DANGANRONPA_SIGNING_KEY_B64 and DANGANRONPA_SIGNING_PASSWORD."
             exit 1
           fi
 
@@ -490,8 +488,8 @@ jobs:
           import base64
           import os
           from pathlib import Path
-          Path("build-apk/p4g-signing.p12").write_bytes(
-              base64.b64decode(os.environ["P4G_SIGNING_KEY_B64"].strip(), validate=True)
+          Path("build-apk/danganronpa-signing.p12").write_bytes(
+              base64.b64decode(os.environ["DANGANRONPA_SIGNING_KEY_B64"].strip(), validate=True)
           )
           PY
 
@@ -500,10 +498,10 @@ jobs:
           "$BUILD_TOOLS/zipalign" -c -P 16 4 build-apk/aligned.apk
 
           "$BUILD_TOOLS/apksigner" sign \
-            --ks build-apk/p4g-signing.p12 \
+            --ks build-apk/danganronpa-signing.p12 \
             --ks-type PKCS12 \
-            --ks-pass env:P4G_SIGNING_PASSWORD \
-            --key-pass env:P4G_SIGNING_PASSWORD \
+            --ks-pass env:DANGANRONPA_SIGNING_PASSWORD \
+            --key-pass env:DANGANRONPA_SIGNING_PASSWORD \
             --out "build-apk/Danganronpa.apk" \
             build-apk/aligned.apk
 

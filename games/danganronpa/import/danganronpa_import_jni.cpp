@@ -11,7 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include "nxgame.h"
-#include "p4g_maxwell.h"
+#include "danganronpa_maxwell.h"
 #include "nvn_local_shader.h"
 #include "nvn_shaders.h"
 
@@ -118,7 +118,7 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
             std::vector<uint8_t> flat;
             if (!nxi::nso_to_flat_image(nso, flat, error))
                 throw std::runtime_error("Invalid " + module_path.filename().string() + ": " + error);
-            auto blocks = p4g::maxwell_blocks(flat);
+            auto blocks = danganronpa::maxwell_blocks(flat);
             phase = 3;
             for (const auto& block : blocks) {
                 check_cancel();

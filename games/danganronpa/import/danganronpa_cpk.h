@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace p4g {
+namespace danganronpa {
 
 struct CpkFile {
     std::string path;
@@ -32,4 +32,4 @@ bool read_cpk_file(
     std::string& error
 );
 
-} // namespace p4g
+} // namespace danganronpa

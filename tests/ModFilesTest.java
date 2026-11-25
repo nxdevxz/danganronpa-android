@@ -22,9 +22,9 @@ public class ModFilesTest {
     }
 
     public static void main(String[] args) throws Exception {
-        File root = Files.createTempDirectory("p4g-mod-test").toFile();
+        File root = Files.createTempDirectory("danganronpa-mod-test").toFile();
         write(root, "mods/translation/romfs/data_e.cpk");
-        write(root, "mods/tradução_p4g/romfs/DATA_E.CPK");
+        write(root, "mods/tradução_danganronpa/romfs/DATA_E.CPK");
         write(root, "mods/combined/romfs/data.cpk");
         write(root, "mods/combined/exefs/main");
         write(root, "mods/_disabled/romfs/data.cpk");
@@ -36,7 +36,7 @@ public class ModFilesTest {
         write(root, "mods/translation/romfs/.import-pending.tmp");
         write(root, "atmosphere/contents/010062b01525c000/romfs/data.cpk");
         write(root, "atmosphere/contents/other/_romfs/other.bin");
-        Path outside = Files.createTempDirectory("p4g-other-mod");
+        Path outside = Files.createTempDirectory("danganronpa-other-mod");
         Files.write(outside.resolve("external.bin"), new byte[] {1});
         Files.createSymbolicLink(new File(root, "mods/translation/romfs/external").toPath(), outside);
 

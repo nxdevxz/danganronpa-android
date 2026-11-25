@@ -38,8 +38,8 @@ public class GameActivity extends NativeActivity {
             String uri = getIntent().getStringExtra(ImportActivity.EXTRA_URI);
             Os.unsetenv("NX_GAME_UPDATE_FD");
             if (uri != null) {
-                Os.unsetenv("NX_P4G_INSTALLED");
-                Os.unsetenv("NX_P4G_GAME_ROOT");
+                Os.unsetenv("NX_DANGANRONPA_INSTALLED");
+                Os.unsetenv("NX_DANGANRONPA_GAME_ROOT");
                 openSource(uri, getIntent().getStringExtra(ImportActivity.EXTRA_NAME), "NX_GAME_FD", "NX_GAME_NAME");
                 String update = getIntent().getStringExtra(ImportActivity.EXTRA_UPDATE_URI);
                 if (update != null) openSource(update, getIntent().getStringExtra(ImportActivity.EXTRA_UPDATE_NAME),
@@ -53,8 +53,8 @@ public class GameActivity extends NativeActivity {
                 Os.unsetenv("NX_GAME_FD");
                 Os.unsetenv("NX_GAME_NSP");
                 Os.unsetenv("NX_GAME_NAME");
-                Os.setenv("NX_P4G_INSTALLED", "1", true);
-                Os.setenv("NX_P4G_GAME_ROOT", InstalledGameFiles.game(installed).getCanonicalPath(), true);
+                Os.setenv("NX_DANGANRONPA_INSTALLED", "1", true);
+                Os.setenv("NX_DANGANRONPA_GAME_ROOT", InstalledGameFiles.game(installed).getCanonicalPath(), true);
             }
             try (java.io.FileOutputStream out = new java.io.FileOutputStream(new File(getFilesDir(), "data_root.txt"))) {
                 out.write((data.getCanonicalPath() + "\n").getBytes("UTF-8"));

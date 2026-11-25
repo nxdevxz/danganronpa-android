@@ -84,13 +84,13 @@ final class DiagnosticLogs {
     }
 
     private static boolean writeLogcat(Context context, BufferedWriter out) throws IOException {
-        File snapshot = File.createTempFile("p4g-logcat-", ".txt", context.getCacheDir());
+        File snapshot = File.createTempFile("danganronpa-logcat-", ".txt", context.getCacheDir());
         java.lang.Process logcat = null;
         try {
             try {
                 logcat = new ProcessBuilder("/system/bin/logcat", "-b", "main", "-b", "crash",
                         "-v", "threadtime", "-t", Integer.toString(MAX_LINES),
-                        "--uid=" + Process.myUid(), "p4g:V", "Danganronpa-Launch:V", "Danganronpa-Saves:V",
+                        "--uid=" + Process.myUid(), "danganronpa:V", "Danganronpa-Launch:V", "Danganronpa-Saves:V",
                         "AndroidRuntime:E", "libc:F", "*:S")
                         .redirectErrorStream(true).redirectOutput(snapshot).start();
             } catch (IOException e) {
@@ -111,7 +111,7 @@ final class DiagnosticLogs {
                 for (int i = 0; i < MAX_LINES; ++i) {
                     String line = in.readLine();
                     if (line == null) break;
-                    if (line.contains(" p4g ")) gameMessages = true;
+                    if (line.contains(" danganronpa ")) gameMessages = true;
                     out.write(line);
                     out.newLine();
                 }

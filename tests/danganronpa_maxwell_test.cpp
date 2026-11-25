@@ -1,4 +1,4 @@
-#include "p4g_maxwell.h"
+#include "danganronpa_maxwell.h"
 #include <cassert>
 #include <iostream>
 
@@ -13,18 +13,18 @@ int main() {
         return d;
     };
     auto d = fixture();
-    auto b = p4g::maxwell_blocks(d);
+    auto b = danganronpa::maxwell_blocks(d);
     assert(b.size() == 1 && b[0].code == p && b[0].control == c && b[0].size == 0x100);
     // Missing padding, truncated blocks, length underflow and unreasonable lengths are rejected.
-    d.back() = 1; assert(p4g::maxwell_blocks(d).empty());
-    d = fixture(); d.resize(p + 16); assert(p4g::maxwell_blocks(d).empty());
-    d = fixture(); std::memset(d.data() + 0x6f8, 0, 4); assert(p4g::maxwell_blocks(d).empty());
-    d = fixture(); std::memset(d.data() + 0x704, 0xff, 4); assert(p4g::maxwell_blocks(d).empty());
-    assert(p4g::maxwell_blocks({}).empty());
+    d.back() = 1; assert(danganronpa::maxwell_blocks(d).empty());
+    d = fixture(); d.resize(p + 16); assert(danganronpa::maxwell_blocks(d).empty());
+    d = fixture(); std::memset(d.data() + 0x6f8, 0, 4); assert(danganronpa::maxwell_blocks(d).empty());
+    d = fixture(); std::memset(d.data() + 0x704, 0xff, 4); assert(danganronpa::maxwell_blocks(d).empty());
+    assert(danganronpa::maxwell_blocks({}).empty());
     // Ambiguous unrelated controls must not manufacture a shader/control association.
     d = fixture(); d.resize(0x2000); std::memcpy(d.data() + 0x1100, d.data(), 0x880);
     auto u = [&](size_t o, uint32_t x) { std::memcpy(d.data() + o, &x, 4); };
     // Adjacent descriptor remains authoritative even if another one differs in work-group state.
-    u(0x1100 + 0x748, 2); assert(p4g::maxwell_blocks(d).size() == 1);
+    u(0x1100 + 0x748, 2); assert(danganronpa::maxwell_blocks(d).size() == 1);
     std::cout << "PASS: Maxwell block discovery and malformed inputs\n";
 }

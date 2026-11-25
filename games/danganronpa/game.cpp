@@ -6,11 +6,11 @@
 namespace nx {
 
 const game::Info game::kInfo = {
-    "p4g",
+    "danganronpa",
     "Danganronpa THH",
     0x010062B01525C000ull,
     "io.github.nxdevxz.danganronpa",
-    "private/p4g",
+    "private/danganronpa",
     0,
     "C433D980688380A6"
 };
@@ -33,16 +33,16 @@ void game::after_init() {
     default_setting("NX_VERTEX_UPLOAD_RANGES", "0");
 #endif
 
-    log("p4g: runtime initialized");
-    log("p4g: beginning game-specific initialization");
+    log("danganronpa: runtime initialized");
+    log("danganronpa: beginning game-specific initialization");
 }
 
 void game::renderer_start() {
-    log("p4g: renderer started");
+    log("danganronpa: renderer started");
 }
 
 void game::first_frame() {
-    log("p4g: first frame presented");
+    log("danganronpa: first frame presented");
 }
 
 } // namespace nx

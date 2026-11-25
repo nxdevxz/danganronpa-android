@@ -45,23 +45,7 @@ The tests exercise dynamic-offset ordering/partial binds, aligned command payloa
 growth, bounds checks, in-flight ownership and reuse of actual command lists, and actual
 constant-cache invalidation on binding changes, new submits and upload-ring resets.
 Vulkan calls are not executed by these tests. The Android APK build compiles and links the full runtime.
-The existing P4G Beta workflow also runs these regressions after downloading Vulkan headers.
-
-## Build and compare on the phone
-
-The test branch is `perf/chakeyy-nvn-p4g`. Pushing this branch starts the existing **P4G Beta**
-workflow and produces its usual signed APK artifact if all build steps and repository signing
-secrets are available. It can also be run manually from Actions with this branch selected.
-
-Compare that APK with the current main build using the same phone, driver, save, resolution and
-FPS cap. Use a scene where the baseline is below the cap; a locked 30 FPS scene cannot demonstrate
-additional throughput. Warm the same route once for shader compilation, then repeat it and record
-FPS, stutters and phone temperature. Check menus/dialogues, battles, scene transitions and a
-cutscene for rendering regressions. A CPU overhead reduction may have little effect in a GPU-bound
-scene. Keep the prior APK and back up saves before switching builds.
-
-The package and signing setup remain those of P4G. Whether an APK can install over an older build
-depends on using the same signing key; this port does not change the game's version or save format.
+The [Android build](../.github/workflows/build-danganronpa.yml) runs these regressions. Gameplay and performance in Danganronpa have yet to be measured.
 
 ## Second test: direct descriptor keys
 

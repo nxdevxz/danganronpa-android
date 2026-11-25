@@ -45,7 +45,7 @@ int main() {
     assert(previous < 0.95);
     assert(length(radial_stick(diagonal, diagonal, 0.12f, 0.98f)) > kStickMax * 0.999);
 
-    // P4G external gamepad: a radial deadzone, configurable early full scale, and real-time hysteresis.
+    // DANGANRONPA external gamepad: a radial deadzone, configurable early full scale, and real-time hysteresis.
     auto at = [](uint64_t ms) { return ms * 1'000'000; };
     auto feed = [&](GamepadRunStick& stick, float x, float y, uint64_t ms, float full = 0.8f) {
         stick.update(x, y, x, y, at(ms), full);

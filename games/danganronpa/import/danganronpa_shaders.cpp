@@ -1,7 +1,7 @@
 
-#include "p4g_shaders.h"
-#include "p4g_gxp.h"
-#include "p4g_cpk.h"
+#include "danganronpa_shaders.h"
+#include "danganronpa_gxp.h"
+#include "danganronpa_cpk.h"
 
 #include <cerrno>
 #include <cstdio>
@@ -15,7 +15,7 @@
 #include <direct.h>
 #endif
 
-namespace p4g {
+namespace danganronpa {
 namespace {
 
 bool make_dir(
@@ -23,7 +23,7 @@ bool make_dir(
     std::string& error
 ) {
     if (path.empty()) {
-        error = "P4G: empty output folder";
+        error = "DANGANRONPA: empty output folder";
         return false;
     }
 
@@ -45,7 +45,7 @@ bool make_dir(
 #endif
 
         if (rc != 0 && errno != EEXIST) {
-            error = "P4G: could not create folder: " +
+            error = "DANGANRONPA: could not create folder: " +
                     part + " (" + std::strerror(errno) + ")";
             return false;
         }
@@ -54,7 +54,7 @@ bool make_dir(
 
         if (stat(part.c_str(), &info) != 0 ||
             !S_ISDIR(info.st_mode)) {
-            error = "P4G: path is not a folder: " + part;
+            error = "DANGANRONPA: path is not a folder: " + part;
             return false;
         }
     }
@@ -73,7 +73,7 @@ bool save_file(
     FILE* f = std::fopen(tmp.c_str(), "wb");
 
     if (!f) {
-        error = "P4G: could not open: " + tmp;
+        error = "DANGANRONPA: could not open: " + tmp;
         return false;
     }
 
@@ -86,7 +86,7 @@ bool save_file(
     if (!written || !closed ||
         std::rename(tmp.c_str(), path.c_str()) != 0) {
         std::remove(tmp.c_str());
-        error = "P4G: could not write: " + path;
+        error = "DANGANRONPA: could not write: " + path;
         return false;
     }
 
@@ -195,7 +195,7 @@ long extract_shaders(
 
     if (!cpk || cpk->dir || cpk->size < 16) {
         error =
-            "P4G: data.cpk missing or invalid";
+            "DANGANRONPA: data.cpk missing or invalid";
         return -1;
     }
 
@@ -213,7 +213,7 @@ long extract_shaders(
 
     if (files.size() != 6) {
         error =
-            "P4G: unexpected number of GXP packages";
+            "DANGANRONPA: unexpected number of GXP packages";
         return -1;
     }
 
@@ -223,7 +223,7 @@ long extract_shaders(
     }
 
     const std::string dir =
-        out_dir + "/p4g_gxp";
+        out_dir + "/danganronpa_gxp";
 
     if (!make_dir(dir, error)) {
         return -1;
@@ -261,7 +261,7 @@ long extract_shaders(
 
         if (!expected_pack_name(name)) {
             error =
-                "P4G: unexpected package name: " +
+                "DANGANRONPA: unexpected package name: " +
                 file.path;
 
             return -1;
@@ -290,7 +290,7 @@ long extract_shaders(
                 parse_error
             ) || records.empty()) {
             error =
-                "P4G: invalid GXP in " +
+                "DANGANRONPA: invalid GXP in " +
                 name + ": " + parse_error;
 
             return -1;
@@ -313,7 +313,7 @@ long extract_shaders(
                 rec.offset > data.size() ||
                 rec.size > data.size() - rec.offset) {
                 error =
-                    "P4G: registro GXP invalido em " +
+                    "DANGANRONPA: registro GXP invalido em " +
                     name;
 
                 return -1;
@@ -372,7 +372,7 @@ long extract_shaders(
                 total
             )) {
             error =
-                "P4G: program count "
+                "DANGANRONPA: program count "
                 "exceeded limit";
 
             return -1;
@@ -430,4 +430,4 @@ long extract_shaders(
     return total;
 }
 
-} // namespace p4g
+} // namespace danganronpa

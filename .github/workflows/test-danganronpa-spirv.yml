@@ -17,7 +17,7 @@ jobs:
         run: |
           set -e
 
-          GXP="games/p4g/tests/V00000000_00000000.gxp"
+          GXP="games/danganronpa/tests/V00000000_00000000.gxp"
 
           test -s "$GXP"
 
@@ -26,7 +26,7 @@ jobs:
           import struct
 
           path = Path(
-              "games/p4g/tests/V00000000_00000000.gxp"
+              "games/danganronpa/tests/V00000000_00000000.gxp"
           )
 
           data = path.read_bytes()
@@ -86,7 +86,7 @@ jobs:
         run: |
           mkdir -p test-results
 
-          GXP="$GITHUB_WORKSPACE/games/p4g/tests/V00000000_00000000.gxp"
+          GXP="$GITHUB_WORKSPACE/games/danganronpa/tests/V00000000_00000000.gxp"
           VITA="$GITHUB_WORKSPACE/vita3k-test/squashfs-root/AppRun"
 
           cd test-results

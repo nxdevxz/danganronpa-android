@@ -8,7 +8,7 @@
 #include <utility>
 #include <vector>
 
-namespace p4g {
+namespace danganronpa {
 struct MaxwellBlock { size_t code, control; uint32_t size; };
 inline std::vector<MaxwellBlock> maxwell_blocks(const std::vector<uint8_t>& data) {
     auto in = [&](size_t p, size_t n) { return p <= data.size() && n <= data.size() - p; };

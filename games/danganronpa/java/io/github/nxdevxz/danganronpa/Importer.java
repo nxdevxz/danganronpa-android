@@ -6,7 +6,7 @@ package io.github.nxdevxz.danganronpa;
  */
 final class Importer {
     static {
-        System.loadLibrary("p4gimport");
+        System.loadLibrary("danganronpaimport");
     }
 
     static native int run(

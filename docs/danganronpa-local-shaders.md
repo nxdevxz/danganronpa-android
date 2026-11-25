@@ -1,6 +1,9 @@
-# Local shader generation
+# Tradutor de shaders do projeto
 
-P4G no longer needs a preconverted game shader pack in the APK. Its Maxwell translator is built from the pinned MIT Ryubing source (`a82350bb77`, archive SHA-256 checked by the build script). The APK contains the compiler, its license notices, and the port's own presentation/overlay shaders, not the game's translated shader files.
+Estas notas descrevem a implementação herdada. A compatibilidade com os shaders de Trigger Happy Havoc ainda precisa de teste.
+
+
+DANGANRONPA no longer needs a preconverted game shader pack in the APK. Its Maxwell translator is built from the pinned MIT Ryubing source (`a82350bb77`, archive SHA-256 checked by the build script). The APK contains the compiler, its license notices, and the port's own presentation/overlay shaders, not the game's translated shader files.
 
 ## Preparation
 
@@ -22,7 +25,7 @@ Only a newly translated shader or an error is logged, once per hash per run. No 
 
 ## Build and validation
 
-`build-p4g.yml` builds `libspirvharness.so` from source using .NET 10 NativeAOT for `linux-bionic-arm64`. It no longer downloads `libp4gshader.so` from an old GXP conversion artifact. The APK verifier rejects `.spv` entries, `assets/spirv/`, and the obsolete converter. License notices in `assets/licenses/` are ordinary text and are retained.
+`build-danganronpa.yml` builds `libspirvharness.so` from source using .NET 10 NativeAOT for `linux-bionic-arm64`. It no longer downloads `libdanganronpashader.so` from an old GXP conversion artifact. The APK verifier rejects `.spv` entries, `assets/spirv/`, and the obsolete converter. License notices in `assets/licenses/` are ordinary text and are retained.
 
 Host checks exercise original synthetic Maxwell translation, malformed input, block discovery, Java compilation, cache readiness, and existing save import/rollback behavior. They do not replace a cold-cache Android test with the player's game. NativeAOT's Android Bionic support is experimental upstream: https://github.com/dotnet/runtime/blob/main/src/coreclr/nativeaot/docs/android-bionic.md
 

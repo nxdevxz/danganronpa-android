@@ -27,12 +27,12 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/p4g-classes"
-          find games/p4g/java -name '*.java' > "$RUNNER_TEMP/p4g-sources.txt"
-          echo tests/LauncherSettingsTest.java >> "$RUNNER_TEMP/p4g-sources.txt"
+          mkdir -p "$RUNNER_TEMP/danganronpa-classes"
+          find games/danganronpa/java -name '*.java' > "$RUNNER_TEMP/danganronpa-sources.txt"
+          echo tests/LauncherSettingsTest.java >> "$RUNNER_TEMP/danganronpa-sources.txt"
           javac -encoding UTF-8 --release 8 -cp "$ANDROID_HOME/platforms/android-35/android.jar" \
-            -d "$RUNNER_TEMP/p4g-classes" @"$RUNNER_TEMP/p4g-sources.txt"
-          java -cp "$RUNNER_TEMP/p4g-classes:$ANDROID_HOME/platforms/android-35/android.jar" \
+            -d "$RUNNER_TEMP/danganronpa-classes" @"$RUNNER_TEMP/danganronpa-sources.txt"
+          java -cp "$RUNNER_TEMP/danganronpa-classes:$ANDROID_HOME/platforms/android-35/android.jar" \
             io.github.nxdevxz.danganronpa.LauncherSettingsTest
       - name: Test saves, mods and installation
         run: python3 tests/test_app_flow.py
@@ -44,8 +44,8 @@ jobs:
             c++ -std=c++17 -Wall -Wextra -Werror -pthread -I runtime/src "tests/${test}_test.cpp" -o "$RUNNER_TEMP/$test"
             "$RUNNER_TEMP/$test"
           done
-          c++ -std=c++17 -Wall -Wextra -Werror -I games/p4g/import tests/p4g_maxwell_test.cpp -o "$RUNNER_TEMP/p4g-maxwell"
-          "$RUNNER_TEMP/p4g-maxwell"
+          c++ -std=c++17 -Wall -Wextra -Werror -I games/danganronpa/import tests/danganronpa_maxwell_test.cpp -o "$RUNNER_TEMP/danganronpa-maxwell"
+          "$RUNNER_TEMP/danganronpa-maxwell"
           c++ -std=c++20 -Wall -Wextra -Werror -pthread -I tests/audio_stubs -I runtime/include \
             tests/android_audio_test.cpp -o "$RUNNER_TEMP/android-audio"
           "$RUNNER_TEMP/android-audio"

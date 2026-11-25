@@ -24,7 +24,7 @@ def main():
     if args.sanitize:
         flags += ['-fsanitize=address,undefined', '-fno-omit-frame-pointer']
     tests = ['nvn_dynamic_offsets', 'nvn_command_blob', 'nvn_command_pool', 'nvn_constants_cache', 'nvn_descriptor_cache']
-    with tempfile.TemporaryDirectory(prefix='p4g-nvn-tests-') as directory:
+    with tempfile.TemporaryDirectory(prefix='danganronpa-nvn-tests-') as directory:
         for name in tests:
             binary = Path(directory) / name
             subprocess.run(compiler + flags + [str(ROOT / 'tests' / (name + '_test.cpp')),

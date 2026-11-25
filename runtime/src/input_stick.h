@@ -22,7 +22,7 @@ inline StickPosition radial_stick(float x, float y, float deadzone, float outer)
     return {int32_t(std::lround(double(x) * scale)), int32_t(std::lround(double(y) * scale))};
 }
 
-// Only the P4G Android gamepad path uses this filter. Poll sample() as well as update() to expire a non-neutral
+// Only the DANGANRONPA Android gamepad path uses this filter. Poll sample() as well as update() to expire a non-neutral
 // low-input grace even without another event. A current neutral sample always stops immediately.
 class GamepadRunStick {
 public:

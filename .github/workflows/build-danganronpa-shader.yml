@@ -395,7 +395,7 @@ jobs:
           NDK="$ANDROID_HOME/ndk/28.2.13676358"
           CXX="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android29-clang++"
 
-          cat > "$OUT/p4g_shader_api.cpp" <<'EOF'
+          cat > "$OUT/danganronpa_shader_api.cpp" <<'EOF'
           #include <shader/spirv_recompiler.h>
           #include <features/state.h>
           #include <gxm/types.h>
@@ -414,11 +414,11 @@ jobs:
           // Return: 0=written, -1=args, -2=invalid header,
           //         -3=translation failed, -4=invalid SPIR-V,
           //         -5=write failure.
-          extern "C" int p4g_shader_api_version() {
+          extern "C" int danganronpa_shader_api_version() {
               return 2;
           }
 
-          extern "C" int p4g_shader_convert(
+          extern "C" int danganronpa_shader_convert(
               const void* gxp_data,
               size_t gxp_size,
               const char* output_path
@@ -469,7 +469,7 @@ jobs:
 
                   const auto generated = shader::convert_gxp(
                       program,
-                      "p4g_android",
+                      "danganronpa_android",
                       features,
                       shader::Target::SpirVVulkan,
                       hints
@@ -512,10 +512,10 @@ jobs:
             -I vita3k-source/external/glslang \
             -I vita3k-source/external/SPIRV-Cross \
             -I "$OUT/third_party" \
-            -c "$OUT/p4g_shader_api.cpp" \
-            -o "$OUT/objects/p4g_shader_api.o" \
-            > "$OUT/logs/p4g_shader_api.log" 2>&1 || {
-              cat "$OUT/logs/p4g_shader_api.log"
+            -c "$OUT/danganronpa_shader_api.cpp" \
+            -o "$OUT/objects/danganronpa_shader_api.o" \
+            > "$OUT/logs/danganronpa_shader_api.log" 2>&1 || {
+              cat "$OUT/logs/danganronpa_shader_api.log"
               exit 1
             }
 
@@ -535,7 +535,7 @@ jobs:
           READELF="$TOOLCHAIN/llvm-readelf"
 
           OUT="build-shader"
-          LIB="$OUT/libp4gshader.so"
+          LIB="$OUT/libdanganronpashader.so"
 
           mkdir -p "$OUT/logs"
 
@@ -586,7 +586,7 @@ jobs:
           "$NM" -D --defined-only "$LIB" > "$OUT/logs/exported-symbols.txt"
 
           file "$LIB"
-          echo "libp4gshader.so linked successfully."
+          echo "libdanganronpashader.so linked successfully."
 
       - name: Verify shader library
         shell: bash
@@ -597,7 +597,7 @@ jobs:
           TOOLCHAIN="$NDK/toolchains/llvm/prebuilt/linux-x86_64/bin"
           READELF="$TOOLCHAIN/llvm-readelf"
 
-          LIB="build-shader/libp4gshader.so"
+          LIB="build-shader/libdanganronpashader.so"
 
           test -s "$LIB"
 
@@ -611,8 +611,8 @@ jobs:
           "$READELF" -d "$LIB" | grep NEEDED || true
 
           NM="$TOOLCHAIN/llvm-nm"
-          "$NM" -D --defined-only "$LIB" | grep -Eq '[[:space:]]p4g_shader_api_version$'
-          "$NM" -D --defined-only "$LIB" | grep -Eq '[[:space:]]p4g_shader_convert$'
+          "$NM" -D --defined-only "$LIB" | grep -Eq '[[:space:]]danganronpa_shader_api_version$'
+          "$NM" -D --defined-only "$LIB" | grep -Eq '[[:space:]]danganronpa_shader_convert$'
 
           echo "ARM64 shader C API v2 symbols verified."
           echo "Runtime GXP conversion still needs Android integration."
@@ -628,8 +628,8 @@ jobs:
             build-shader/dependency-results.tsv
             build-shader/logs/
             build-shader/object-types.txt
-            build-shader/libp4gshader.so
-            build-shader/p4g_shader_api.cpp
+            build-shader/libdanganronpashader.so
+            build-shader/danganronpa_shader_api.cpp
             vita3k-commit.txt
           if-no-files-found: warn
 
@@ -648,7 +648,7 @@ jobs:
             exit 1
           fi
 
-          test -s build-shader/libp4gshader.so
+          test -s build-shader/libdanganronpashader.so
 
           echo "All shader sources compiled."
           echo "All selected dependencies compiled."

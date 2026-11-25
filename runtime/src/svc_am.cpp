@@ -98,7 +98,7 @@ std::shared_ptr<Service> self_controller() {
             c.push<uint64_t>(recording_layer);
 
             log(
-                "p4g: CreateManagedDisplaySeparableLayer "
+                "danganronpa: CreateManagedDisplaySeparableLayer "
                 "-> application=%llu, recording=%llu",
                 (unsigned long long)application_layer,
                 (unsigned long long)recording_layer

@@ -6,7 +6,7 @@ import java.util.*;
 
 /** One complete, replaceable installation. Saves, mods and settings stay outside this directory. */
 final class InstalledGameFiles {
-    static final String FORMAT = "format\tp4g-installed-v1";
+    static final String FORMAT = "format\tdanganronpa-installed-v1";
     static final String TITLE = "title\t010062b01525c000";
     private static final Object LOCK = new Object();
     private static boolean preparing;

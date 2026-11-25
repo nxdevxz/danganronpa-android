@@ -1,15 +1,15 @@
-"""Remove only the old P4G shader pack from this checkout, not from a phone.
+"""Remove only the old DANGANRONPA shader pack from this checkout, not from a phone.
 
-Run from any working directory: python path/to/repo/tools/remove_bundled_p4g_shaders.py
+Run from any working directory: python path/to/repo/tools/remove_bundled_danganronpa_shaders.py
 """
 from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parents[1]
-manifest = root / 'games/p4g/AndroidManifest.xml'
+manifest = root / 'games/danganronpa/AndroidManifest.xml'
 if not manifest.is_file() or 'io.github.nxdevxz.danganronpa' not in manifest.read_text(encoding='utf-8'):
-    raise SystemExit('Not a P4G checkout; nothing removed.')
-target = root / 'games/p4g/assets/spirv'
+    raise SystemExit('Not a DANGANRONPA checkout; nothing removed.')
+target = root / 'games/danganronpa/assets/spirv'
 if not target.exists():
     print('Old bundled pack is already absent.')
     raise SystemExit(0)

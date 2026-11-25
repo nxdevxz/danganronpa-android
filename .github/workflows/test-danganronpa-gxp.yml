@@ -5,10 +5,10 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - 'games/p4g/import/p4g_gxp.h'
-      - 'games/p4g/import/p4g_gxp_test.cpp'
-      - 'games/p4g/tests/**'
-      - '.github/workflows/test-p4g-gxp.yml'
+      - 'games/danganronpa/import/danganronpa_gxp.h'
+      - 'games/danganronpa/import/danganronpa_gxp_test.cpp'
+      - 'games/danganronpa/tests/**'
+      - '.github/workflows/test-danganronpa-gxp.yml'
 
 jobs:
   test-gxp:
@@ -21,12 +21,12 @@ jobs:
       - name: Compile GXP extractor
         run: |
           g++ -std=c++17 -Wall -Wextra -Werror \
-            games/p4g/import/p4g_gxp_test.cpp \
-            -o p4g_gxp_test
+            games/danganronpa/import/danganronpa_gxp_test.cpp \
+            -o danganronpa_gxp_test
 
       - name: Verify executable
         run: |
-          test -x ./p4g_gxp_test
+          test -x ./danganronpa_gxp_test
           echo "GXP extractor compiled successfully"
 
       - name: Test GXP parser
@@ -60,7 +60,7 @@ jobs:
               f.write(data)
           PY
 
-          ./p4g_gxp_test test_gxp.bin | tee result.txt
+          ./danganronpa_gxp_test test_gxp.bin | tee result.txt
 
           grep -q "Total de programas GXP: 2" result.txt
           grep -q "F00000000_00000000.gxp" result.txt
@@ -95,7 +95,7 @@ jobs:
           PY
 
           for file in bad_magic.bin bad_size.bin truncated.bin; do
-            if ./p4g_gxp_test "$file"; then
+            if ./danganronpa_gxp_test "$file"; then
               echo "ERROR: Invalid file accepted: $file"
               exit 1
             else
@@ -105,14 +105,14 @@ jobs:
 
           echo "All corrupted GXP tests passed!"
 
-      - name: Inspect real Danganronpa GXP sample
+      - name: Inspect inherited GXP fixture
         run: |
           python3 - <<'PY'
           from pathlib import Path
           import struct
 
           path = Path(
-              "games/p4g/tests/"
+              "games/danganronpa/tests/"
               "V00000000_00000000.gxp"
           )
 
@@ -120,7 +120,7 @@ jobs:
               raise SystemExit(
                   "Real GXP sample missing. "
                   "Upload V00000000_00000000.gxp "
-                  "to games/p4g/tests/"
+                  "to games/danganronpa/tests/"
               )
 
           data = path.read_bytes()

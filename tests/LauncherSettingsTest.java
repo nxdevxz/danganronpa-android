@@ -37,7 +37,7 @@ public final class LauncherSettingsTest {
         check("640x360".equals(config.get("resolution")));
         check("640x360".equals(config.get("NX_RENDER_RES")));
         check("1".equals(config.get("NX_HANDHELD")));
-        java.io.File dir = java.nio.file.Files.createTempDirectory("p4g-config").toFile();
+        java.io.File dir = java.nio.file.Files.createTempDirectory("danganronpa-config").toFile();
         java.io.File file = new java.io.File(dir, "config.txt");
         try {
             config.put("NAME", "Configuração");

@@ -7,10 +7,10 @@
 
 #include "nxgame.h"
 
-namespace p4g {
+namespace danganronpa {
 
 // Extrai os shaders de Persona 4 Golden.
-// Implementacao pendente no p4g_shaders.cpp.
+// Implementacao pendente no danganronpa_shaders.cpp.
 //
 // Retorna a quantidade de shaders extraidos,
 // ou -1 em caso de erro.
@@ -21,4 +21,4 @@ long extract_shaders(
     std::string& error
 );
 
-} // namespace p4g
+} // namespace danganronpa

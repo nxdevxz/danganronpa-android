@@ -6,7 +6,7 @@
 #include <string>
 #include <vector>
 
-namespace p4g {
+namespace danganronpa {
 
 struct GxpRecord {
     std::string name;
@@ -144,4 +144,4 @@ inline bool parseGxp(
     return true;
 }
 
-} // namespace p4g
+} // namespace danganronpa

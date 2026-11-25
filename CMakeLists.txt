@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # The game this build is for: games/<NX_GAME>/ holds what only that game needs (game.cpp: nx/game.h), the shared
 # runtime is the rest. One build directory per game.
-set(NX_GAME "p4g" CACHE STRING "Game to build (a folder under games/)")
+set(NX_GAME "danganronpa" CACHE STRING "Game to build (a folder under games/)")
 set(NX_GAME_DIR "${CMAKE_SOURCE_DIR}/games/${NX_GAME}")
 if(NOT EXISTS "${NX_GAME_DIR}/game.cpp")
     message(FATAL_ERROR "games/${NX_GAME}/game.cpp not found")
@@ -282,7 +282,7 @@ endif()
 
 
 # Persona 4 Golden Android - Native Importer
-if(ANDROID AND NX_GAME STREQUAL "p4g")
+if(ANDROID AND NX_GAME STREQUAL "danganronpa")
     # Driver loader and hooks from P5R Android v0.5.3 (BSD-2-Clause).
     block(SCOPE_FOR VARIABLES)
         set(BUILD_SHARED_LIBS OFF)
@@ -296,8 +296,8 @@ if(ANDROID AND NX_GAME STREQUAL "p4g")
         target_link_options(${hook} PRIVATE -Wl,-z,max-page-size=16384)
     endforeach()
 
-    add_library(p4gimport SHARED
-        games/p4g/import/p4g_import_jni.cpp
+    add_library(danganronpaimport SHARED
+        games/danganronpa/import/danganronpa_import_jni.cpp
         runtime/src/nvn/nvn_local_shader.cpp
         runtime/src/nvn/nvn_shaders.cpp
         runtime/src/nvn/nvn_spirv_reflect.cpp
@@ -305,24 +305,24 @@ if(ANDROID AND NX_GAME STREQUAL "p4g")
         "${NX_IMPORTER_DIR}/nxcrypto.cpp"
     )
 
-    target_include_directories(p4gimport PRIVATE
+    target_include_directories(danganronpaimport PRIVATE
         "${NX_IMPORTER_DIR}"
-        games/p4g/import
+        games/danganronpa/import
         runtime/src/nvn
     )
-    target_compile_definitions(p4gimport PRIVATE NX_SHADERS_STANDALONE)
+    target_compile_definitions(danganronpaimport PRIVATE NX_SHADERS_STANDALONE)
     target_sources(${NX_GAME} PRIVATE runtime/src/nvn/nvn_local_shader.cpp)
     target_compile_definitions(${NX_GAME} PRIVATE NX_LOCAL_SHADERS)
 
-    target_compile_options(p4gimport PRIVATE
+    target_compile_options(danganronpaimport PRIVATE
         -O2
         -fvisibility=hidden
         -march=armv8-a+crypto
     )
 
-    target_link_libraries(p4gimport PRIVATE log dl)
+    target_link_libraries(danganronpaimport PRIVATE log dl)
 
-    target_link_options(p4gimport PRIVATE
+    target_link_options(danganronpaimport PRIVATE
         -Wl,-z,max-page-size=16384
     )
 endif()
@@ -335,11 +335,11 @@ if(NX_ANDROID_THIN_LTO)
         message(FATAL_ERROR "NX_ANDROID_THIN_LTO requires Clang")
     endif()
 
-    foreach(target IN ITEMS ${NX_GAME} p4gimport)
+    foreach(target IN ITEMS ${NX_GAME} danganronpaimport)
         if(TARGET ${target})
             target_compile_options(${target} PRIVATE $<$<CONFIG:Release>:-flto=thin>)
             target_link_options(${target} PRIVATE $<$<CONFIG:Release>:-flto=thin>)
         endif()
     endforeach()
-    message(STATUS "Android Release ThinLTO enabled for native P4G targets")
+    message(STATUS "Android Release ThinLTO enabled for native DANGANRONPA targets")
 endif()

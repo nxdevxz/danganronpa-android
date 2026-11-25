@@ -52,7 +52,7 @@
 namespace nx::plat {
 
 // ---- input: game controllers + touch --------------------------------------------------------------------------
-// Touch: left virtual stick; P4G can keep its base fixed, while floating/legacy layouts are relative to touch-down. The
+// Touch: left virtual stick; DANGANRONPA can keep its base fixed, while floating/legacy layouts are relative to touch-down. The
 // right half has four buttons in a
 // diamond around the thumb (Y attack up-left, X special up-right, B dash down-left, A interact down-right), top
 // corners L / R, top centre +. Games with a drawn layout (touch_layout.cpp) use its buttons instead, and may make the
@@ -78,17 +78,17 @@ struct Latch {
 std::vector<Latch> g_latched;
 constexpr uint64_t kMinHoldNs = 150'000'000;
 
-// P4G consumes button edges. Replay short taps as distinct HID samples even
+// DANGANRONPA consumes button edges. Replay short taps as distinct HID samples even
 // if both Android events arrived between two reads.
 std::array<uint8_t, 64> g_pending_edges{};
 uint64_t g_sampled_buttons = 0;
 uint64_t g_next_button_sample = 0;
 
-bool p4g_input() {
+bool danganronpa_input() {
     static const bool enabled = [] {
-        const bool p4g = std::strcmp(nx::game::kInfo.id, "p4g") == 0;
-        if (p4g) nx::log("hid: P4G radial left-stick mapping enabled (outer radius 0.98)");
-        return p4g;
+        const bool danganronpa = std::strcmp(nx::game::kInfo.id, "danganronpa") == 0;
+        if (danganronpa) nx::log("hid: DANGANRONPA radial left-stick mapping enabled (outer radius 0.98)");
+        return danganronpa;
     }();
     return enabled;
 }
@@ -106,10 +106,10 @@ float gamepad_stick_full() {
 
 bool gamepad_run_fix() {
     static const bool on = [] {
-        if (std::strcmp(nx::game::kInfo.id, "p4g") != 0) return false;
-        const char* e = std::getenv("NX_P4G_STICK_FIX");
+        if (std::strcmp(nx::game::kInfo.id, "danganronpa") != 0) return false;
+        const char* e = std::getenv("NX_DANGANRONPA_STICK_FIX");
         const bool enabled = (!e || std::strcmp(e, "0") != 0) && gamepad_stick_full() > 0;
-        nx::log("p4g: gamepad left-stick run-fix-v4 %s (deadzone 0.10, full %.3f, release 0.55, hold 100 ms; neutral stops)",
+        nx::log("danganronpa: gamepad left-stick run-fix-v4 %s (deadzone 0.10, full %.3f, release 0.55, hold 100 ms; neutral stops)",
                 enabled ? "enabled" : "disabled", double(gamepad_stick_full()));
         return enabled;
     }();
@@ -133,8 +133,8 @@ void sample_gamepad_left(uint64_t now) {
 // touch/script override can be distinguished. These observers never change movement or discard input events.
 bool analog_trace_enabled() {
     static const bool on = [] {
-        const char* aggregate = std::getenv("NX_P4G_ANALOG_TRACE");
-        const char* detail = std::getenv("NX_P4G_STICK_TRACE");
+        const char* aggregate = std::getenv("NX_DANGANRONPA_ANALOG_TRACE");
+        const char* detail = std::getenv("NX_DANGANRONPA_STICK_TRACE");
         const char* verbose = std::getenv("NX_VERBOSE_LOG");
         return (aggregate && aggregate[0] == '1') || (detail && detail[0] == '1') ||
                (verbose && verbose[0] == '1');
@@ -258,7 +258,7 @@ constexpr uint64_t kTouchIdleNs = 8'000'000'000;
 bool gamepad_swap_abxy() {
     static const bool swap = [] {
         const char* e = std::getenv("NX_GAMEPAD_LAYOUT");
-        return e ? std::strcmp(e, "1") == 0 : p4g_input();
+        return e ? std::strcmp(e, "1") == 0 : danganronpa_input();
     }();
     return swap;
 }
@@ -434,7 +434,7 @@ int32_t on_input(android_app* app, AInputEvent* e) {
                 g_run_history = 0;
             }
             sample_gamepad_left(now);
-        } else if (p4g_input()) {
+        } else if (danganronpa_input()) {
             const StickPosition left = radial_stick(AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_X, 0),
                     -AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_Y, 0), 0.12f, 0.98f);
             g_pad_buttons.lx = left.x;
@@ -462,7 +462,7 @@ int32_t on_input(android_app* app, AInputEvent* e) {
         if (AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_RTRIGGER, 0) > 0.4f ||
             AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_GAS, 0) > 0.4f)
             g_pad_buttons.buttons |= kZR;
-        if (p4g_input() && analog_trace_enabled()) trace_controller(AInputEvent_getDeviceId(e), src, AMotionEvent_getAction(e),
+        if (danganronpa_input() && analog_trace_enabled()) trace_controller(AInputEvent_getDeviceId(e), src, AMotionEvent_getAction(e),
                 AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_X, 0),
                 -AMotionEvent_getAxisValue(e, AMOTION_EVENT_AXIS_Y, 0), monotonic_ns());
         return 1;
@@ -482,17 +482,17 @@ int32_t on_input(android_app* app, AInputEvent* e) {
         reset_touch();
         return 1;
     }
-    const bool queued = p4g_input();
+    const bool queued = danganronpa_input();
     const uint64_t before = queued ? held_touch_buttons() : 0;
     if (kind == AMOTION_EVENT_ACTION_DOWN || kind == AMOTION_EVENT_ACTION_POINTER_DOWN) {
         float x = AMotionEvent_getX(e, index), y = AMotionEvent_getY(e, index);
         g_gamepad = false;
         size_t drawn = 0;
         touch_buttons(drawn);
-        if (drawn || p4g_input()) {  // P4G keeps its stick/camera regions even when every button is hidden
+        if (drawn || danganronpa_input()) {  // DANGANRONPA keeps its stick/camera regions even when every button is hidden
             uint64_t b = touch_hit(x / g_w, y / g_h, g_w / g_h);
             const bool stick_side = !b && touch_stick_side(x / g_w);
-            const bool fixed_left = p4g_input() && touch_left_stick_fixed();
+            const bool fixed_left = danganronpa_input() && touch_left_stick_fixed();
             const bool left = stick_side && (!fixed_left || touch_stick_hit(x / g_w, y / g_h, g_w / g_h));
             Stick stick = b ? kNoStick : left ? kLeftStick :
                     !stick_side && touch_right_stick() ? kRightStick : kNoStick;
@@ -560,7 +560,7 @@ static void read_pad_impl(PadState& p, bool sample_buttons) {
     g_latched.erase(std::remove_if(g_latched.begin(), g_latched.end(), [&](const Latch& l) { return now >= l.until_ns; }),
                     g_latched.end());
     for (const auto& l : g_latched) p.buttons |= l.button;
-    const bool queued = p4g_input();
+    const bool queued = danganronpa_input();
     if (queued) {
         if (sample_buttons) sample_touch_buttons(now);
         p.buttons |= g_sampled_buttons;
@@ -572,7 +572,7 @@ static void read_pad_impl(PadState& p, bool sample_buttons) {
             analog_touch_left = true;
             float sx = dx * stick_sens();
             float sy = -dy * stick_sens();
-            if (p4g_input()) {
+            if (danganronpa_input()) {
                 const StickPosition left = radial_stick(sx, sy, 0.f, 0.98f);
                 p.lx = left.x;
                 p.ly = left.y;
@@ -602,12 +602,12 @@ static void read_pad_impl(PadState& p, bool sample_buttons) {
 void read_pad(PadState& p) { read_pad_impl(p, true); }
 void read_pad_motion(PadState& p) { read_pad_impl(p, false); }
 
-// Opt-in diagnosis at the final HID write, after its circular clamp. The project has no validated P4G player
+// Opt-in diagnosis at the final HID write, after its circular clamp. The project has no validated DANGANRONPA player
 // position/speed address: never report analog strength or a guessed guest-memory value as character speed.
 void trace_gamepad_left(const PadState& p, uint64_t frame) {
     static const bool on = [] {
-        const char* e = std::getenv("NX_P4G_STICK_TRACE");
-        return e && std::strcmp(e, "1") == 0 && std::strcmp(nx::game::kInfo.id, "p4g") == 0;
+        const char* e = std::getenv("NX_DANGANRONPA_STICK_TRACE");
+        return e && std::strcmp(e, "1") == 0 && std::strcmp(nx::game::kInfo.id, "danganronpa") == 0;
     }();
     if (!on) return;
     std::lock_guard lk(g_in);
@@ -619,11 +619,11 @@ void trace_gamepad_left(const PadState& p, uint64_t frame) {
     if ((last_frame != UINT64_MAX && frame < last_frame) || lines >= 18'000) return;
     const double magnitude = std::hypot(double(p.lx), double(p.ly));
     if (frame == last_frame && magnitude >= frame_min) return;
-    if (!lines) nx::log("p4g: final gamepad trace enabled (per presented frame plus lower writes, max 18000; character speed unavailable)");
+    if (!lines) nx::log("danganronpa: final gamepad trace enabled (per presented frame plus lower writes, max 18000; character speed unavailable)");
     last_frame = frame;
     frame_min = magnitude;
     ++lines;
-    nx::log("p4g: stick-final frame=%llu t_ns=%llu lx=%d ly=%d magnitude=%.3f normalized=%.6f "
+    nx::log("danganronpa: stick-final frame=%llu t_ns=%llu lx=%d ly=%d magnitude=%.3f normalized=%.6f "
             "buttons=%llx origin=%s run_fix=%u running=%u character_speed=unavailable",
             (unsigned long long)frame, (unsigned long long)monotonic_ns(), int(p.lx), int(p.ly),
             magnitude, magnitude / kStickMax, (unsigned long long)p.buttons, g_left_read_origin,
@@ -635,7 +635,7 @@ void trace_gamepad_left(const PadState& p, uint64_t frame) {
 size_t touch_overlay(OverlayShape* out, size_t max) {
     size_t n = 0, k = 0;
     const TouchButton* b = touch_buttons(n);
-    if (!n && !p4g_input()) return 0;  // P4G may hide every button while keeping the analog ring
+    if (!n && !danganronpa_input()) return 0;  // DANGANRONPA may hide every button while keeping the analog ring
     std::lock_guard lk(g_in);
     if (g_gamepad || !touch_enabled()) return 0;
     // Dimmed to a third while nobody touches the screen (cutscenes, videos), back at once on the next touch.

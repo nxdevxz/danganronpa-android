@@ -849,7 +849,7 @@ static const char* const kDataProbe = "/exefs/main";  // native execution: the p
 static const char* const kDataProbe = "/analysis/main.bin";
 #endif
 static bool has_data(const std::string& root) {
-    if (std::strcmp(nx::game::kInfo.id, "p4g") == 0 &&
+    if (std::strcmp(nx::game::kInfo.id, "danganronpa") == 0 &&
             access((root + "/game/installed.tsv").c_str(), R_OK) == 0 &&
             access((root + "/game/exefs/main").c_str(), R_OK) == 0) return true;
     return access((root + kDataProbe).c_str(), R_OK) == 0;
@@ -881,10 +881,10 @@ extern "C" void android_main(android_app* app) {
         }
     }
     // The picked folder wins over the app's own one; else the own one (adb push), else Internal storage/<title>.
-    const char* installed = std::getenv("NX_P4G_INSTALLED");
-    const bool p4g_installed = std::strcmp(nx::game::kInfo.id, "p4g") == 0 && installed && installed[0] == '1';
+    const char* installed = std::getenv("NX_DANGANRONPA_INSTALLED");
+    const bool danganronpa_installed = std::strcmp(nx::game::kInfo.id, "danganronpa") == 0 && installed && installed[0] == '1';
     // The installed payload can live in Android/data while this chosen root still holds saves, mods and config.
-    g_root = !chosen.empty() && (has_data(chosen) || p4g_installed || std::getenv("NX_GAME_FD")) ? chosen : has_data(own) ? own : shared;
+    g_root = !chosen.empty() && (has_data(chosen) || danganronpa_installed || std::getenv("NX_GAME_FD")) ? chosen : has_data(own) ? own : shared;
     // config.txt's NX_* lines become environment variables (the NVN layer reads its switches with getenv), without
     // overriding a variable already set. Android defaults: handheld (720p, the lighter GPU load).
     {
@@ -955,7 +955,7 @@ extern "C" void android_main(android_app* app) {
                     setenv("NX_RENDER_RES", size.c_str(), 1);
                     setenv("NX_ULTRAWIDE", size.c_str(), 1);
                     setenv("NX_UW_CAMERA", "0", 1);
-                    nx::log("p4g: Hor+ guest display and NVN output %s", size.c_str());
+                    nx::log("danganronpa: Hor+ guest display and NVN output %s", size.c_str());
                 }
             }
             start_thread(game_thread, nullptr, 256ull << 20);  // the guest main thread; deep host recursion

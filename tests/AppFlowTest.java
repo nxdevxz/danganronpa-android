@@ -165,8 +165,8 @@ public class AppFlowTest {
         System.out.println("PASS: game-only migration, byte-for-byte rename/copy, low-space failure/retry, interrupted cleanup and existing-destination protection");
     }
     public static void main(String[] args) throws Exception {
-        File temp = Files.createTempDirectory("p4g-flow-test").toFile();
-        System.setProperty("p4g.test.root", temp.getPath());
+        File temp = Files.createTempDirectory("danganronpa-flow-test").toFile();
+        System.setProperty("danganronpa.test.root", temp.getPath());
         check("backup/save/".equals(SavePaths.prefix(Arrays.asList("backup/save/data0001.bin", "backup/save/data0001.binslot"))));
         check("".equals(SavePaths.prefix(Arrays.asList("system.bin", "data0099.bin"))));
         check("data0001.bin".equals(SavePaths.target("save/DATA0001.BIN", "save/")));

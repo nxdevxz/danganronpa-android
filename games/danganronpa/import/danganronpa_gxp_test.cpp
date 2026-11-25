@@ -1,5 +1,5 @@
 
-#include "p4g_gxp.h"
+#include "danganronpa_gxp.h"
 
 #include <fstream>
 #include <iostream>
@@ -9,7 +9,7 @@
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr
-            << "Uso: p4g_gxp_test <arquivo.bin>\n";
+            << "Uso: danganronpa_gxp_test <arquivo.bin>\n";
         return 1;
     }
 
@@ -25,10 +25,10 @@ int main(int argc, char** argv) {
         std::istreambuf_iterator<char>()
     );
 
-    std::vector<p4g::GxpRecord> records;
+    std::vector<danganronpa::GxpRecord> records;
     std::string error;
 
-    if (!p4g::parseGxp(data, records, error)) {
+    if (!danganronpa::parseGxp(data, records, error)) {
         std::cerr << "Erro: " << error << "\n";
         return 1;
     }

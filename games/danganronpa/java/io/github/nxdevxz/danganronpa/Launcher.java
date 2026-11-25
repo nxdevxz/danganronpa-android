@@ -219,7 +219,7 @@ public class Launcher extends Activity {
         } catch (Exception ignored) {  // a provider without persistable grants: works while the app runs
         }
         prefs().edit().putString("uri", uri.toString()).putString("name", name)
-                .remove("p4g_prepared_uri").remove("direct_ready").apply();
+                .remove("danganronpa_prepared_uri").remove("direct_ready").apply();
     }
 
     void onUpdatePicked(Uri uri) {
@@ -535,7 +535,7 @@ public class Launcher extends Activity {
             else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
             else if (directMode() && !updateReadable()) recoverDirectUpdate();
             else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
-            else { prefs().edit().remove("p4g_prepared_uri").apply(); prepare(); }
+            else { prefs().edit().remove("danganronpa_prepared_uri").apply(); prepare(); }
         });
         addLauncherSettings(root);
         ScrollView setup = new ScrollView(this);
@@ -1017,7 +1017,7 @@ public class Launcher extends Activity {
         if (request == PREPARE) {
             installedCheck = new InstalledGameFiles.RecentCheck();
             if (result == RESULT_OK && gameUri() != null) {
-                prefs().edit().putString(directMode() ? "direct_ready" : "p4g_prepared_uri", gameUri()).apply();
+                prefs().edit().putString(directMode() ? "direct_ready" : "danganronpa_prepared_uri", gameUri()).apply();
                 Log.i("Danganronpa-Launch", "Local game installation complete");
             }
             refresh();
@@ -1267,7 +1267,7 @@ public class Launcher extends Activity {
         for (String key : new String[] {"RENDER_SCALE", "NX_ANISO_MAX", "NX_OVERLAY_FRAME_TIME", "language",
                 "GRAPHICS", "NX_FSR", "NX_HUD_1080", "NX_SHADOWS", "NX_MALI_LOW_SHADOWS", "NX_DISABLE_BLOOM",
                 "NX_VIBRATION", "NX_TOUCH_HIDE", "NX_PIPE_PREWARM", "NX_PIPE_PREWARM_LOAD", "NX_AFFINITY",
-                "NX_P4G_MOTION_BLUR", "NX_LOD_BIAS"}) settings.remove(key);
+                "NX_DANGANRONPA_MOTION_BLUR", "NX_LOD_BIAS"}) settings.remove(key);
     }
 
     boolean save() {
