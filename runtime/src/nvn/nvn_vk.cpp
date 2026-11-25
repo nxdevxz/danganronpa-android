@@ -769,6 +769,7 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     plat::perf_hint_thread();  // the thread that presents takes part in the frame (perf_hint.cpp)
     std::lock_guard lk(g_gpu);
     PresentTimer timer;
+    const uint64_t composite = take_display_composite();
     drain_objects();  // under the GPU lock, as in gpu_submit
     if (!init()) return;
     if (!async_gpu() || pipelined()) free_retired_images(async_gpu() ? frame_completed() : UINT64_MAX);
@@ -799,6 +800,22 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     static uint64_t probes = 0;
     gpu_probe_record(g_cb, ++probes);  // NX_GPU_PROBE (nvn_gpu_probe.cpp)
     GpuImage* src = image_of(texture);
+    if (composite && composite != texture && src && !src->rendered && !src->uploaded && !src->texels) {
+        const Texture* target = get<Texture>(composite);
+        GpuImage* output = target ? target->image.get() : nullptr;
+        if (output && output->rendered && output->view_type == VK_IMAGE_VIEW_TYPE_2D &&
+            output->aspect == VK_IMAGE_ASPECT_COLOR_BIT && output->layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+            static bool logged = false;
+            if (!logged) {
+                log("nvn: presenting final Unity composite %llx (%ux%u) for unwritten window %llx",
+                    (unsigned long long)composite, output->width, output->height, (unsigned long long)texture);
+                logged = true;
+            }
+            if (target->width != src->width || target->height != src->height) crop = nullptr;
+            texture = composite;
+            src = output;
+        }
+    }
     static uint64_t presents = 0;
     ++presents;
     const bool probe = perf_stats_on() && (presents == 60 || presents == 180);
