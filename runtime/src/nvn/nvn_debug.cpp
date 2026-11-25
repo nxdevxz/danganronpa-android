@@ -477,7 +477,7 @@ bool debug_snap_wanted(uint64_t draw) {
         }
         return v;
     }();
-    return std::find(list.begin(), list.end(), draw) != list.end();
+    return (perf_stats_on() && draw >= 1 && draw <= 10) || std::find(list.begin(), list.end(), draw) != list.end();
 }
 
 uint32_t g_snap_layer = 0, g_snap_level = 0;  // which layer and level the next debug_snapshot reads (nvn_draw.cpp)
@@ -498,8 +498,15 @@ void debug_snapshot(VkCommandBuffer cb, GpuImage& img, uint64_t draw) {
         snap.w = std::max(1u, std::min(uint32_t(crop[2] * img.width), img.width - uint32_t(x0)));
         snap.h = std::max(1u, std::min(uint32_t(crop[3] * img.height), img.height - uint32_t(y0)));
     }
+    // A small grid from each startup draw locates where the opening loses color.
+    const bool sample = perf_stats_on() && draw >= 1 && draw <= 10 && !std::getenv("NX_SNAP_DRAWS");
+    const uint32_t source_width = snap.w, source_height = snap.h;
+    if (sample) {
+        snap.w = std::min(64u, snap.w);
+        snap.h = std::min(36u, snap.h);
+    }
     static const bool raw_early = std::getenv("NX_SNAP_RAW") != nullptr;
-    const bool wide = raw_early && img.format == VK_FORMAT_R16G16B16A16_SFLOAT;  // 8-byte texels: a buffer twice as wide
+    const bool wide = !sample && raw_early && img.format == VK_FORMAT_R16G16B16A16_SFLOAT;  // 8-byte texels: a buffer twice as wide
     if (!make_scratch(snap.s, snap.w * (wide ? 2 : 1), snap.h)) {
         snap.s.destroy(vk_device());
         return;
@@ -509,7 +516,7 @@ void debug_snapshot(VkCommandBuffer cb, GpuImage& img, uint64_t draw) {
     // NX_SNAP_RAW=1: 4-byte formats (R32F depth copies, RG16F, ...) as stored, to frames/00000_<draw>.raw (u32 width,
     // height, VkFormat, then the texels): an RGBA8 blit rounds small floats to 0..2.
     static const bool raw = std::getenv("NX_SNAP_RAW") != nullptr;
-    if (raw && (img.format == VK_FORMAT_R32_SFLOAT || img.format == VK_FORMAT_R16G16_SFLOAT ||
+    if (!sample && raw && (img.format == VK_FORMAT_R32_SFLOAT || img.format == VK_FORMAT_R16G16_SFLOAT ||
                 img.format == VK_FORMAT_R32_UINT || img.format == VK_FORMAT_R8G8B8A8_UNORM || wide)) {
         VkBufferImageCopy r{};
         r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
@@ -528,7 +535,7 @@ void debug_snapshot(VkCommandBuffer cb, GpuImage& img, uint64_t draw) {
     VkImageBlit blit{};
     blit.srcSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, std::min(g_snap_level, img.levels - 1), std::min(g_snap_layer, img.layers - 1), 1};
     blit.srcOffsets[0] = {x0, y0, 0};
-    blit.srcOffsets[1] = {x0 + int32_t(snap.w), y0 + int32_t(snap.h), 1};
+    blit.srcOffsets[1] = {x0 + int32_t(source_width), y0 + int32_t(source_height), 1};
     blit.dstSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1};
     blit.dstOffsets[1] = {int32_t(snap.w), int32_t(snap.h), 1};
     p_vkCmdBlitImage(cb, img.image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, snap.s.image,
@@ -571,6 +578,19 @@ void debug_snapshots_write() {  // after the submit's fence
                 std::fclose(f);
             }
             p_vkUnmapMemory(vk_device(), snap.s.buffer_memory);
+        } else if (perf_stats_on() && snap.draw >= 1 && snap.draw <= 10 && !std::getenv("NX_SNAP_DRAWS")) {
+            if (p_vkMapMemory(vk_device(), snap.s.buffer_memory, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS) {
+                const auto* rgba = static_cast<const uint8_t*>(p);
+                unsigned lit = 0, peak = 0;
+                for (unsigned i = 0; i < snap.w * snap.h; ++i) {
+                    unsigned value = std::max({rgba[4*i], rgba[4*i+1], rgba[4*i+2]});
+                    lit += value > 0;
+                    peak = std::max(peak, value);
+                }
+                log("startup draw %llu: %u/%u nonblack samples, peak %u",
+                    (unsigned long long)snap.draw, lit, snap.w * snap.h, peak);
+                p_vkUnmapMemory(vk_device(), snap.s.buffer_memory);
+            }
         } else if (!snap.raw_format) {
             write_ppm(snap.s, snap.w, snap.h, 0, snap.draw);  // frames/00000_<draw in hex>.ppm
         }
