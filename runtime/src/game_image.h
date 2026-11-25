@@ -16,6 +16,8 @@ namespace nx {
 
 // The image, opened on first use; null when no game file is configured. A configured file that does not open is fatal.
 const nxi::GameImage* game_image();
+uint64_t active_program_id();
+std::string alternate_build_id();
 
 // DANGANRONPA's installed ExeFS/RomFS/shader payload; configuration, saves and mods remain in plat::data_root().
 std::string game_files_root();

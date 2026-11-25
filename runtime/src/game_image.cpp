@@ -8,6 +8,8 @@
 #endif
 
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #include <cstring>
 #include <memory>
 #include <mutex>
@@ -79,7 +81,7 @@ void open_image() {
         if (f >= 0) keys.push_back(f), in.push_back({"title.keys", f});
     }
     std::string err;
-    g_image = nxi::GameImage::open(in, game::kInfo.program_id, err);
+    g_image = nxi::GameImage::open(in, game::kInfo.program_id, err, game::kInfo.alternate_program_id);
     for (int f : keys) close_fd(f);
     if (!g_image) fatal("game: %s could not be read: %s", shown.c_str(), err.c_str());
     log("game: %s read in place (title %016llx): %zu RomFS files, ExeFS %zu files", shown.c_str(),
@@ -104,6 +106,31 @@ std::string game_files_root() {
 const nxi::GameImage* game_image() {
     std::call_once(g_once, open_image);
     return g_image.get();
+}
+
+uint64_t active_program_id() {
+    static const uint64_t id = [] {
+        if (const auto* image = game_image()) return image->title_id();
+        if (game::kInfo.alternate_program_id && game_files_root() != plat::data_root()) {
+            std::ifstream manifest(game_files_root() + "/installed.tsv");
+            std::string format, title;
+            std::ostringstream expected;
+            expected << "title\t" << std::hex << game::kInfo.alternate_program_id;
+            if (std::getline(manifest, format) && std::getline(manifest, title) && title == expected.str())
+                return game::kInfo.alternate_program_id;
+        }
+        return game::kInfo.program_id;
+    }();
+    return id;
+}
+
+std::string alternate_build_id() {
+    if (!game::kInfo.alternate_program_id || active_program_id() != game::kInfo.alternate_program_id) return {};
+    if (const auto* image = game_image()) return image->main_build_id();
+    std::ifstream marker(game_files_root() + "/.import/usa-build");
+    std::string id;
+    std::getline(marker, id);
+    return id;
 }
 
 std::string game_image_path(const std::string& path) {

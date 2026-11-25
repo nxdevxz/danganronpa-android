@@ -70,6 +70,22 @@ public class AppFlowTest {
         check(InstalledGameFiles.ready(root) && InstalledGameFiles.present(root));
         // No source NSP, URI, prod.keys or title.keys exists in this fixture.
         check("installed data".equals(new String(Files.readAllBytes(new File(root, "game/extract/romfs/CPK/data.cpk").toPath()), "UTF-8")));
+        File usaRoot = new File(parent, "us-base-test");
+        usaRoot.mkdirs();
+        File usaStage = InstalledGameFiles.begin(usaRoot);
+        installationFixture(usaStage, "US data");
+        String usaId = "00112233445566778899AABBCCDDEEFF";
+        try (RandomAccessFile mainFile = new RandomAccessFile(new File(usaStage, "exefs/main"), "rw")) {
+            mainFile.seek(0x40);
+            mainFile.write(hex(usaId));
+        }
+        text(new File(usaStage, ".import/usa-build"), usaId + "\n");
+        InstalledGameFiles.finish(usaStage);
+        InstalledGameFiles.publish(usaRoot, usaStage);
+        check(InstalledGameFiles.ready(usaRoot));
+        File usaGame = InstalledGameFiles.game(usaRoot);
+        check(Files.readAllLines(new File(usaGame, "installed.tsv").toPath()).get(1).equals(InstalledGameFiles.USA_TITLE));
+        check(InstalledGameFiles.revision(usaGame).startsWith("US build "));
         File original = InstalledGameFiles.game(root);
         stage = InstalledGameFiles.begin(root); installationFixture(stage, "bad");
         Files.delete(new File(stage, "exefs/sdk").toPath());

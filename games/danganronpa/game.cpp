@@ -14,7 +14,8 @@ const game::Info game::kInfo = {
     "private/danganronpa",
     0,
     danganronpa::profile::base_build,
-    danganronpa::profile::update_build
+    danganronpa::profile::update_build,
+    danganronpa::profile::usa_program_id
 };
 
 void game::after_init() {

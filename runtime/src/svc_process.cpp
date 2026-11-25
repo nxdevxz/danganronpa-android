@@ -8,6 +8,7 @@
 #include <nx/runtime.h>
 
 #include "kernel.h"
+#include "game_image.h"
 
 namespace nx {
 
@@ -35,7 +36,7 @@ uint64_t get_info(uint32_t type, uint32_t handle, uint64_t sub, uint32_t& rc) {
         case 15: return kStackSize;
         case 16: return game::kInfo.system_resource_size;  // SystemResourceSizeTotal
         case 17: return 0;
-        case 18: return game::kInfo.program_id;  // ProgramId
+        case 18: return active_program_id();  // ProgramId
         case 20: {  // UserExceptionContextAddress: a page of ours (SDK 16 keeps its dying-message region at +0x1C0)
             static uint64_t ctx = kernel_alloc(0x1000);
             return ctx;

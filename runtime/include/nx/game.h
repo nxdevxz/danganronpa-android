@@ -19,6 +19,7 @@ struct Info {
     // player's exefs/main (the hooks and offsets in game.cpp are those of one version). Null: any.
     const char* main_build_id = nullptr;
     const char* update_build_id = nullptr;
+    uint64_t alternate_program_id = 0;
 };
 extern const Info kInfo;
 

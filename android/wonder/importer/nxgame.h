@@ -24,10 +24,11 @@ public:
 
     // inputs: the NSP/XCI (or the parts of a split XCI) and prod.keys (title.keys if the dump needs it), as for
     // run_import. title_id 0: the only game found. Null with `error` set on failure (never key material).
-    static std::unique_ptr<GameImage> open(const std::vector<InputFile>& inputs, uint64_t title_id, std::string& error);
+    static std::unique_ptr<GameImage> open(const std::vector<InputFile>& inputs, uint64_t title_id, std::string& error, uint64_t alternate_id = 0);
     ~GameImage();
 
     uint64_t title_id() const;
+    std::string main_build_id() const;
     // The ExeFS files ("main", "sdk", "subsdk0", "main.npdm", ...), checked against the NCA's hash table.
     const std::map<std::string, std::vector<uint8_t>>& exefs() const;
     // RomFS paths are '/'-separated with no leading slash ("CPK/ALL_USEU.CPK"); "" is the root. As dumped (case kept).

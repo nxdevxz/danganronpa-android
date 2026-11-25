@@ -1487,6 +1487,20 @@ struct GameImage::Impl {
 
 GameImage::GameImage() : impl_(std::make_unique<Impl>()) {}
 GameImage::~GameImage() = default;
+std::string GameImage::main_build_id() const {
+    auto it = exefs().find("main");
+    if (it == exefs().end() || it->second.size() < 0x100 || std::memcmp(it->second.data(), "NSO0", 4)) return {};
+    const auto* id = it->second.data() + 0x40;
+    if (std::all_of(id, id + 16, [](uint8_t b) { return b == 0; })) return {};
+    std::string out;
+    for (int i = 0; i < 16; ++i) {
+        static constexpr char digits[] = "0123456789ABCDEF";
+        out += digits[id[i] >> 4];
+        out += digits[id[i] & 15];
+    }
+    return out;
+}
+
 uint64_t GameImage::title_id() const { return impl_->title; }
 const std::map<std::string, std::vector<uint8_t>>& GameImage::exefs() const { return impl_->exefs; }
 size_t GameImage::file_count() const {
@@ -1520,7 +1534,7 @@ uint64_t GameImage::read(const Entry& file, uint64_t off, void* dst, uint64_t n)
     }
 }
 
-std::unique_ptr<GameImage> GameImage::open(const std::vector<InputFile>& inputs, uint64_t title_id, std::string& error) {
+std::unique_ptr<GameImage> GameImage::open(const std::vector<InputFile>& inputs, uint64_t title_id, std::string& error, uint64_t alternate_id) {
     std::unique_ptr<GameImage> g(new GameImage());
     Impl& im = *g->impl_;
     try {
@@ -1584,8 +1598,12 @@ std::unique_ptr<GameImage> GameImage::open(const std::vector<InputFile>& inputs,
         }
         secure_zero(hk, sizeof hk);
         uint64_t app = title_id & ~0xFFFull;
+        auto matches = [&](uint64_t id) {
+            uint64_t base_id = id & ~0xFFFull;
+            return !app || base_id == app || (alternate_id && base_id == alternate_id);
+        };
         for (auto& n : programs) {
-            if (app && (n->title_id & ~0xFFFull) != app) continue;
+            if (!matches(n->title_id)) continue;
             bool patch = false, sparse = false;
             for (int i = 0; i < 4; i++)
                 if (n->sec[i].present && n->sec[i].partition() == 0) patch |= n->sec[i].is_patch(), sparse |= n->sec[i].is_sparse();
@@ -1598,7 +1616,7 @@ std::unique_ptr<GameImage> GameImage::open(const std::vector<InputFile>& inputs,
             if (programs.empty()) fail("No game program found. Select the base game's NSP or XCI.");
             std::set<uint64_t> found;
             for (const auto& program : programs) {
-                if (!app || (program->title_id & ~0xFFFull) == app)
+                if (matches(program->title_id))
                     fail("Only update content found for %s. Select the base NSP/XCI as the game file and the update separately.",
                          tid_str(program->title_id).c_str());
                 found.insert(program->title_id);

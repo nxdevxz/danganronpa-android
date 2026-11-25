@@ -7,6 +7,7 @@ import java.util.*;
 /** One complete, replaceable installation. Saves, mods and settings stay outside this directory. */
 final class InstalledGameFiles {
     static final String FORMAT = "format\tdanganronpa-installed-v1";
+    static final String USA_TITLE = "title\t0100a3301618e000";
     static final String TITLE = "title\t0100812014172000";
     private static final Object LOCK = new Object();
     private static boolean preparing;
@@ -132,8 +133,28 @@ final class InstalledGameFiles {
         return out.toString();
     }
 
+    private static boolean knownTitle(String line) {
+        return TITLE.equals(line) || USA_TITLE.equals(line);
+    }
+
+    private static String usaBuild(File current) throws IOException {
+        File file = new File(current, ".import/usa-build");
+        if (!file.isFile()) return null;
+        try (BufferedReader r = new BufferedReader(new FileReader(file))) {
+            String id = r.readLine();
+            if (id == null || !id.matches("[0-9A-F]{32}") || id.matches("0{32}"))
+                throw new IOException("Invalid US executable Build ID");
+            return id;
+        }
+    }
+
     static String revision(File current) throws IOException {
         String id = buildId(new File(current, "exefs/main"));
+        String usa = usaBuild(current);
+        if (usa != null) {
+            if (!id.equals(usa)) throw new IOException("US executable differs from the prepared game");
+            return "US build " + id.substring(0, 16);
+        }
         if (id.equals("8144C2AF29A2797F33A722B1E55E6196")) return "Base (v0)";
         if (id.equals("7D420713882DDB2AE2BC95C51822BC98")) return "Update (v1)";
         throw new IOException("Unsupported Danganronpa revision (Build ID " + id + ")");
@@ -144,7 +165,7 @@ final class InstalledGameFiles {
         File current = game(root);
         try (BufferedReader r = new BufferedReader(new InputStreamReader(
                 new FileInputStream(new File(current, "installed.tsv")), "UTF-8"))) {
-            return FORMAT.equals(r.readLine()) && TITLE.equals(r.readLine()) &&
+            return FORMAT.equals(r.readLine()) && knownTitle(r.readLine()) &&
                     nso(new File(current, "exefs/main")) && nso(new File(current, "exefs/sdk")) &&
                     new File(current, "extract/romfs").isDirectory() &&
                     new File(current, "spirv/prepared.tsv").isFile();
@@ -154,7 +175,7 @@ final class InstalledGameFiles {
     static boolean valid(File current) throws IOException {
         try (BufferedReader r = new BufferedReader(new InputStreamReader(
                 new FileInputStream(new File(current, "installed.tsv")), "UTF-8"))) {
-            if (!FORMAT.equals(r.readLine()) || !TITLE.equals(r.readLine())) return false;
+            if (!FORMAT.equals(r.readLine()) || !knownTitle(r.readLine())) return false;
             Set<String> paths = new HashSet<>();
             int romfs = 0;
             for (String line; (line = r.readLine()) != null;) {
@@ -262,7 +283,7 @@ final class InstalledGameFiles {
         }
         try (FileOutputStream stream = new FileOutputStream(new File(stage, "installed.tsv"));
                 Writer writer = new OutputStreamWriter(stream, "UTF-8")) {
-            writer.write(FORMAT + "\n" + TITLE + "\n");
+            writer.write(FORMAT + "\n" + (usaBuild(stage) == null ? TITLE : USA_TITLE) + "\n");
             for (Map.Entry<String, Long> f : files.entrySet()) writer.write("file\t" + f.getValue() + "\t" + f.getKey() + "\n");
             writer.flush(); stream.getFD().sync();
         }

@@ -60,9 +60,12 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         OwnedFd t{title_keys.empty() ? -1 : open(title_keys.c_str(), O_RDONLY | O_CLOEXEC)};
         if (t.value >= 0) inputs.push_back({"title.keys", t.value});
         std::string error;
-        auto game = nxi::GameImage::open(inputs, danganronpa::profile::program_id, error);
+        auto game = nxi::GameImage::open(inputs, danganronpa::profile::program_id, error, danganronpa::profile::usa_program_id);
         if (!game) return fail(error.empty() ? "Could not open the game" : error);
         if (!game->exefs().count("main")) return fail("The game has no main executable");
+        const bool usa = game->title_id() == danganronpa::profile::usa_program_id;
+        if (usa && update_fd >= 0) return fail("For the US edition, select the base game without an update.");
+        if (usa && game->main_build_id().empty()) return fail("Missing US base executable Build ID");
         if (!nx::nvn::local::available(error)) return fail(error);
 
         if (direct) return game->exefs().count("sdk") ? 0 : fail("Missing sdk module");
@@ -71,7 +74,7 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         // streaming importer; no game image or keys are required by the installed runtime.
         nxi::Options options;
         options.out_dir = root.string();
-        options.title_id = danganronpa::profile::program_id;
+        options.title_id = game->title_id();
         options.keep_exefs = true;
         options.cancel = &cancelled;
         options.on_progress = [](const nxi::Progress& p) {
@@ -86,6 +89,8 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
             return fail(error.empty() ? "Game extraction failed" : error);
         if (!fs::is_regular_file(root / "exefs/main") || !fs::is_regular_file(root / "exefs/sdk"))
             return fail("The extracted game is missing main or sdk");
+        if (usa && !write(root / ".import/usa-build", game->main_build_id() + "\n"))
+            return fail("Cannot record US base executable Build ID");
         phase = 7;
         check_cancel();
 

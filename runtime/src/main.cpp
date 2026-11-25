@@ -231,7 +231,10 @@ void boot() {
                 have.rfind(game::kInfo.main_build_id, 0) == 0;
         const bool update = game::kInfo.update_build_id &&
                 have.rfind(game::kInfo.update_build_id, 0) == 0;
-        if (!configured && !update)
+        const auto alternate = alternate_build_id();
+        const bool supported = game::kInfo.alternate_program_id && active_program_id() == game::kInfo.alternate_program_id
+                ? alternate.size() == 32 && have.rfind(alternate, 0) == 0 : configured || update;
+        if (!supported)
             fatal("%s: unsupported main Build ID %s", game::kInfo.title, have.c_str());
         log("%s: main build %s recognized", game::kInfo.id, have.c_str());
     }
