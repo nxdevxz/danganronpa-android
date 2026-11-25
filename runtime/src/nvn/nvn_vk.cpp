@@ -769,7 +769,7 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     plat::perf_hint_thread();  // the thread that presents takes part in the frame (perf_hint.cpp)
     std::lock_guard lk(g_gpu);
     PresentTimer timer;
-    const uint64_t composite = take_display_composite();
+    const DisplayComposite composite = take_display_composite();
     drain_objects();  // under the GPU lock, as in gpu_submit
     if (!init()) return;
     if (!async_gpu() || pipelined()) free_retired_images(async_gpu() ? frame_completed() : UINT64_MAX);
@@ -800,25 +800,28 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     static uint64_t probes = 0;
     gpu_probe_record(g_cb, ++probes);  // NX_GPU_PROBE (nvn_gpu_probe.cpp)
     GpuImage* src = image_of(texture);
-    if (composite && composite != texture && src && !src->rendered && !src->uploaded && !src->texels) {
-        const Texture* target = get<Texture>(composite);
-        GpuImage* output = target ? target->image.get() : nullptr;
-        if (output && output->rendered && output->view_type == VK_IMAGE_VIEW_TYPE_2D &&
-            output->aspect == VK_IMAGE_ASPECT_COLOR_BIT && output->layout != VK_IMAGE_LAYOUT_UNDEFINED) {
-            static bool logged = false;
-            if (!logged) {
-                log("nvn: presenting final Unity composite %llx (%ux%u) for unwritten window %llx",
-                    (unsigned long long)composite, output->width, output->height, (unsigned long long)texture);
-                logged = true;
-            }
-            if (target->width != src->width || target->height != src->height) crop = nullptr;
-            texture = composite;
-            src = output;
-        }
-    }
     static uint64_t presents = 0;
     ++presents;
     const bool probe = perf_stats_on() && (presents == 60 || presents == 180);
+    auto output = composite.image.lock();
+    if (probe)
+        log("nvn display selection: window %llx rendered %d uploaded %d texels %d composite %llx live %d type %d",
+            (unsigned long long)texture, src && src->rendered, src && src->uploaded, src && src->texels,
+            (unsigned long long)composite.texture, bool(output), output ? int(output->view_type) : -1);
+    if (src && !src->rendered && !src->texels && output && output.get() != src && output->image &&
+        output->rendered && output->aspect == VK_IMAGE_ASPECT_COLOR_BIT &&
+        (output->view_type == VK_IMAGE_VIEW_TYPE_2D || output->view_type == VK_IMAGE_VIEW_TYPE_2D_ARRAY) &&
+        output->layout != VK_IMAGE_LAYOUT_UNDEFINED) {
+        static bool logged = false;
+        if (!logged) {
+            log("nvn: presenting final Unity composite %llx (%ux%u) for unwritten window %llx",
+                (unsigned long long)composite.texture, output->width, output->height, (unsigned long long)texture);
+            logged = true;
+        }
+        if (output->width != src->width || output->height != src->height) crop = nullptr;
+        texture = composite.texture;
+        src = output.get();
+    }
     const bool undefined = src && src->layout == VK_IMAGE_LAYOUT_UNDEFINED;
     int32_t hud_crop[4];  // NX_HUD_1080: the window texture is 3/2 of its guest size, and so is the crop
     if (src && src->hud && crop) {

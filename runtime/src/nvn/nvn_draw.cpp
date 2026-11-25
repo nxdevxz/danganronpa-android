@@ -63,7 +63,7 @@ bool narrow_pass_barrier() {
 // inside) and the writes so far are made visible to the vertex stages.
 void vertex_read_barrier(VkCommandBuffer cb, const ShaderInfo* vs);  // the open pass is a render pass object (nvn_renderpass.cpp), not dynamic rendering
 Targets g_pass;           // what the open pass renders to
-uint64_t g_last_composite = 0;
+DisplayComposite g_last_composite;
 GpuImage* g_pass_images[9];  // their images (8: depth), resolved once per pass for gather_textures
 uint32_t g_pass_written = 0;  // targets the open pass's draws wrote: bit c colour c, bit 8 depth
 uint64_t g_pass_draws = 0;    // draws in the open pass (NX_EXP_RP split)
@@ -974,9 +974,15 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     // same shaders target intermediate surfaces, so remember only the final draw.
     static const bool track_composite = std::strcmp(game::kInfo.id, "danganronpa") == 0;
     if (track_composite) {
-        const bool composite = t.color_count == 1 && !t.views.level[0] && !t.views.layer[0] && fs &&
+        const bool composite = t.color_count > 0 && !t.views.level[0] && !t.views.layer[0] && fs &&
                                vs->hash == "682752fe4552b2a4" && fs->hash == "724b91d788fb0f23";
-        g_last_composite = composite ? t.colors[0] : 0;
+        g_last_composite = {};
+        if (composite) {
+            // Resolve at the submit's object-generation mark. Unity can recycle the
+            // guest texture address before the queued present reaches the GPU worker.
+            if (auto* target = get<Texture>(t.colors[0]); target && target->image.get() == g_pass_images[0])
+                g_last_composite = {t.colors[0], target->image};
+        }
     }
     if (g_pass_draws++ == 0 && (exp_render_pass() & 4)) pass_end_only(cb, 9);  // NX_EXP_RP split: one more store and load
     if (gpu_profile_on())
@@ -1017,8 +1023,8 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
 
 }  // namespace
 
-uint64_t take_display_composite() {
-    return std::exchange(g_last_composite, 0);
+DisplayComposite take_display_composite() {
+    return std::exchange(g_last_composite, {});
 }
 
 // A game that knows nobody reads its linear targets for a while pauses their copies (P5R: during films, whose

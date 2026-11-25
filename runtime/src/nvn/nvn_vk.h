@@ -242,7 +242,11 @@ void draw_begin_submit();
 void draw_end_submit();  // after the GPU finished the submit
 void linear_targets_write_back(VkCommandBuffer cb);  // nvn_draw.cpp: pitch-linear targets drawn into, back to guest memory
 void draw_log_stats();
-uint64_t take_display_composite();
+struct DisplayComposite {
+    uint64_t texture = 0;
+    std::weak_ptr<GpuImage> image;
+};
+DisplayComposite take_display_composite();
 void draw_command(VkCommandBuffer cb, const Cmd& c, const CmdList& list, const Targets& targets);
 // reason (counted in the `nvn passes ended` log): 0 submit end, 1 draw, 2 dispatch, 3 clear of other targets,
 // 4 clear larger than the pass, 5 copy, 6 snapshot, 7 SetRenderTargets (NX_TARGETS_BREAK).
