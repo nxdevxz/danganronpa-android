@@ -124,6 +124,34 @@ uint64_t active_program_id() {
     return id;
 }
 
+uint64_t process_system_resource_size() {
+    static const uint64_t size = []() -> uint64_t {
+        uint8_t header[0x18]{};
+        bool available = false;
+        if (const auto* image = game_image()) {
+            const auto& files = image->exefs();
+            auto it = files.find("main.npdm");
+            if (it != files.end() && it->second.size() >= sizeof header) {
+                std::memcpy(header, it->second.data(), sizeof header);
+                available = true;
+            }
+        } else {
+            std::ifstream npdm(game_files_root() + "/exefs/main.npdm", std::ios::binary);
+            available = static_cast<bool>(npdm.read(reinterpret_cast<char*>(header), sizeof header));
+        }
+        if (!available || std::memcmp(header, "META", 4) != 0) {
+            log("process: main.npdm header unavailable; using profile system resource size %llu",
+                static_cast<unsigned long long>(game::kInfo.system_resource_size));
+            return game::kInfo.system_resource_size;
+        }
+        const uint32_t bytes = uint32_t(header[0x14]) | (uint32_t(header[0x15]) << 8) |
+                (uint32_t(header[0x16]) << 16) | (uint32_t(header[0x17]) << 24);
+        log("process: main.npdm system resource size %u bytes", bytes);
+        return bytes;
+    }();
+    return size;
+}
+
 std::string alternate_build_id() {
     if (!game::kInfo.alternate_program_id || active_program_id() != game::kInfo.alternate_program_id) return {};
     if (const auto* image = game_image()) return image->main_build_id();

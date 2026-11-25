@@ -34,7 +34,7 @@ uint64_t get_info(uint32_t type, uint32_t handle, uint64_t sub, uint32_t& rc) {
         case 13: return kAddressSpaceSize;
         case 14: return kStackBase;
         case 15: return kStackSize;
-        case 16: return game::kInfo.system_resource_size;  // SystemResourceSizeTotal
+        case 16: return process_system_resource_size();  // SystemResourceSizeTotal
         case 17: return 0;
         case 18: return active_program_id();  // ProgramId
         case 20: {  // UserExceptionContextAddress: a page of ours (SDK 16 keeps its dying-message region at +0x1C0)

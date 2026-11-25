@@ -1337,6 +1337,11 @@ int import_main(Run& run, const std::vector<InputFile>& inputs, std::string& err
                 }
                 has_main |= name == "main";
             } else {
+                if (opt.keep_exefs && name == "main.npdm") {
+                    Writer raw(root + "/exefs/" + name);
+                    raw.write(blob.data(), blob.size());
+                    raw.commit();
+                }
                 outb = std::move(blob);
                 rel = "analysis/" + name;
             }
