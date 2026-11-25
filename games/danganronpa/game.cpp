@@ -24,6 +24,11 @@ void game::after_init() {
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
+    // Capture a bounded startup draw trace when the player enables diagnostics.
+    if (const char* trace = std::getenv("NX_TRACE_PERF"); trace && trace[0] == '1') {
+        default_setting("NX_TRACE_DRAWS", "0");
+        default_setting("NX_TRACE_COUNT", "24");
+    }
     default_setting("NX_PIPE_PREWARM", "0");
     default_setting("NX_AFFINITY", "0");
     // The game asks for 16x anisotropic filtering on its ground and walls; on phone GPUs (Adreno 6xx, Mali-G5x/G7x)
