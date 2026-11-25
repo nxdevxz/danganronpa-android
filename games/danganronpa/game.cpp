@@ -28,6 +28,10 @@ void game::after_init() {
     if (const char* trace = std::getenv("NX_TRACE_PERF"); trace && trace[0] == '1') {
         default_setting("NX_TRACE_DRAWS", "0");
         default_setting("NX_TRACE_COUNT", "24");
+        // Correlate the loading scene's asset requests with shader pairs that
+        // actually cover pixels while the window is black.
+        default_setting("NX_TRACE_FS", "1");
+        default_setting("NX_ZERO_DRAWS", "1");
     }
     default_setting("NX_PIPE_PREWARM", "0");
     default_setting("NX_AFFINITY", "0");
