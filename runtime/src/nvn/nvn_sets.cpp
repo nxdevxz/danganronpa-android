@@ -43,6 +43,39 @@ namespace {
 
 int api_stage(ShaderStage s) { return s == ShaderStage::Fragment ? 1 : s == ShaderStage::Compute ? 5 : 0; }
 
+// The shader translator packs the texture and sampler banks into one slot and their
+// word offsets into one handle (Ryujinx TextureHandle.PackSlots / PackOffsets).
+uint32_t texture_word(int stage, uint32_t bank, uint32_t word) {
+    if (bank == 2) {
+        if (word < 8 || (word - 8) / 2 >= std::size(g_state.textures[stage])) return 0;
+        const uint64_t binding = g_state.textures[stage][(word - 8) / 2];
+        return uint32_t(binding >> (32 * (word & 1)));
+    }
+    if (bank < 3 || bank - 3 >= std::size(g_state.uniforms[stage])) return 0;
+    const Range& range = g_state.uniforms[stage][bank - 3];
+    const uint64_t offset = uint64_t(word) * sizeof(uint32_t);
+    if (!range.address || offset + sizeof(uint32_t) > range.size) return 0;
+    const uint8_t* data = guest_bytes(range.address + offset);
+    uint32_t value = 0;
+    if (data) std::memcpy(&value, data, sizeof(value));
+    return value;
+}
+
+uint32_t shader_texture_handle(int stage, const NvnMeaning& binding) {
+    if (binding.bank < 0 || binding.word < 0) return 0;
+    const uint32_t slots = binding.bank, offsets = binding.word;
+    const uint32_t texture_bank = slots & 0xffff;
+    const uint32_t texture = texture_word(stage, texture_bank, offsets & 0x3fff);
+    const uint32_t kind = offsets >> 28;
+    if (kind == 0) return texture;
+    const uint32_t sampler_word = (offsets >> 14) & 0x3fff;
+    if (kind == 3) return texture | (sampler_word << 20);
+    if (kind != 1 && kind != 2) return 0;
+    const uint32_t sampler_bank = slots >> 16 ? (slots >> 16) - 1 : texture_bank;
+    const uint32_t sampler = texture_word(stage, sampler_bank, sampler_word);
+    return texture | (kind == 2 ? sampler << 20 : sampler);
+}
+
 // The texture and sampler a handle names in the bound pools, looked up (texture_for without its cache).
 // `has_sampler`: the sampler pool had the slot (`sampler` is left alone otherwise).
 void lookup_handle(uint64_t handle, uint64_t& texture, SamplerInfo& sampler, ViewInfo* view,
@@ -702,11 +735,8 @@ uint32_t gather_textures(const std::vector<const ShaderInfo*>& shaders) {
         uint64_t handle = 0;
         if (b->nvn.source == NvnSource::SamplerBinding && b->nvn.index >= 0 && b->nvn.index < 32)
             handle = g_state.textures[st][b->nvn.index];
-        else if (b->nvn.source == NvnSource::HandleInUniform && b->nvn.bank >= 3) {
-            const Range& r = g_state.uniforms[st][b->nvn.bank - 3];
-            const uint8_t* p = r.address ? guest_bytes(r.address) : nullptr;
-            if (p && uint64_t(b->nvn.word) * 4 + 4 <= r.size) handle = *reinterpret_cast<const uint32_t*>(p + b->nvn.word * 4);
-        }
+        else if (b->nvn.source == NvnSource::HandleInUniform || (b->nvn.bank == 2 && b->nvn.word >= (1 << 28)))
+            handle = shader_texture_handle(st, b->nvn);
         t.handles[k] = handle;
         ResolvedTexture& r = t.resolved[k];
         uint64_t texture = 0;
