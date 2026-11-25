@@ -1594,7 +1594,20 @@ std::unique_ptr<GameImage> GameImage::open(const std::vector<InputFile>& inputs,
             if (im.base) fail("several games in the files given (%s, %s)", tid_str(im.base->title_id).c_str(), tid_str(n->title_id).c_str());
             im.base = std::move(n);
         }
-        if (!im.base) fail(app ? "the files hold no base game of title %s" : "no base game found", tid_str(app).c_str());
+        if (!im.base) {
+            if (programs.empty()) fail("No game program found. Select the base game's NSP or XCI.");
+            std::set<uint64_t> found;
+            for (const auto& program : programs) {
+                if (!app || (program->title_id & ~0xFFFull) == app)
+                    fail("Only update content found for %s. Select the base NSP/XCI as the game file and the update separately.",
+                         tid_str(program->title_id).c_str());
+                found.insert(program->title_id);
+            }
+            std::string ids;
+            for (uint64_t id : found) ids += (ids.empty() ? "" : ", ") + tid_str(id);
+            fail("Expected base title %s. Selected file(s) contain program ID(s): %s.",
+                 tid_str(app).c_str(), ids.c_str());
+        }
         Nca& b = *im.base;
         if (!b.key_ok) fail("%s: %s", b.name.c_str(), b.key_problem.c_str());
         im.title = b.title_id;
