@@ -799,6 +799,10 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     static uint64_t probes = 0;
     gpu_probe_record(g_cb, ++probes);  // NX_GPU_PROBE (nvn_gpu_probe.cpp)
     GpuImage* src = image_of(texture);
+    static uint64_t presents = 0;
+    ++presents;
+    const bool probe = perf_stats_on() && (presents == 60 || presents == 180);
+    const bool undefined = src && src->layout == VK_IMAGE_LAYOUT_UNDEFINED;
     int32_t hud_crop[4];  // NX_HUD_1080: the window texture is 3/2 of its guest size, and so is the crop
     if (src && src->hud && crop) {
         hud_crop[0] = hud_up(crop[0]), hud_crop[1] = hud_up(crop[1]);
@@ -833,14 +837,17 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
                          VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
     }
     if (!drawn) transition(g_cb, dst, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
-    static uint64_t presents = 0;
-    presents++;
+
     if (perf_stats_on() && presents % (presents < 300 ? 60 : 300) == 0) draw_log_stats();
     if (presents % 60 == 0) log_timing(60), gpu_profile_log(60);
     if (presents % 300 == 0) zero_draws_log();
     frame_sig_flush(presents);
     const bool due = frame_dump_due(presents);
-    bool dump = src && due;
+    if (probe)
+        log("nvn display frame %llu: texture %llx size %ux%u format %d rendered %d fallback clear %d present pass %d",
+            (unsigned long long)presents, (unsigned long long)texture, src ? src->width : 0, src ? src->height : 0,
+            src ? int(src->format) : -1, src && src->rendered, undefined, drawn);
+    bool dump = src && (due || probe);
     if (dump) transition(g_cb, *src, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);  // the present pass left it sampled
     dump = dump && frame_dump_record(g_cb, *src);
     VkSemaphore rendered = async_gpu() ? frame_rendered_semaphore(index) : g_rendered;
@@ -848,7 +855,9 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
         frame_submit(acquired, rendered, {}, dump);
     else
         end_and_wait(acquired, rendered);
-    if (dump) frame_dump_write(*src, presents);
+    if (probe && dump) frame_log_pixels(*src, presents);
+    if (probe && !dump) log("nvn display pixels unavailable");
+    if (due && dump) frame_dump_write(*src, presents);
     if (due) debug_dump_textures(presents);
     debug_hud_dump(presents);  // dump_hud (nvn_debug.cpp): only when a frame was armed
     VkPresentInfoKHR pi{VK_STRUCTURE_TYPE_PRESENT_INFO_KHR};

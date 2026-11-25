@@ -308,6 +308,23 @@ bool frame_dump_record(VkCommandBuffer cb, GpuImage& img) {
     return true;
 }
 
+void frame_log_pixels(const GpuImage& img, uint64_t frame) {
+    void* data = nullptr;
+    if (p_vkMapMemory(vk_device(), g_readback.memory, 0, VK_WHOLE_SIZE, 0, &data) != VK_SUCCESS) {
+        log("nvn display pixels: mapping failed");
+        return;
+    }
+    const auto* pixels = static_cast<const uint8_t*>(data);
+    const size_t count = size_t(img.width) * img.height;
+    size_t different = 0;
+    for (size_t i = 1; i < count; ++i)
+        different += std::memcmp(pixels, pixels + 4 * i, 3) != 0;
+    const bool bgra = img.format == VK_FORMAT_B8G8R8A8_UNORM;
+    log("nvn display pixels frame %llu: first RGB %02x%02x%02x, %zu of %zu differ from first",
+        (unsigned long long)frame, pixels[bgra ? 2 : 0], pixels[1], pixels[bgra ? 0 : 2], different, count);
+    p_vkUnmapMemory(vk_device(), g_readback.memory);
+}
+
 void frame_dump_write(const GpuImage& img, uint64_t frame) {
     void* p = nullptr;
     if (p_vkMapMemory(vk_device(), g_readback.memory, 0, VK_WHOLE_SIZE, 0, &p) != VK_SUCCESS) return;

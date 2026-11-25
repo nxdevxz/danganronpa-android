@@ -658,6 +658,17 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     }
     // Textures first: an upload or a layout change cannot happen inside the render pass.
     uint32_t gathered = gather_textures(*shaders);
+    if (perf_stats_on() && g_frame.load() == 59) {
+        static unsigned traced = 0;
+        if (traced < 32) {
+            ++traced;
+            log("nvn display draw %u: target %llx vertex %s fragment %s textures %zu", traced,
+                (unsigned long long)t.colors[0], vs->hash.c_str(), fs ? fs->hash.c_str() : "-", g_textures.handles.size());
+            for (size_t k = 0; k < std::min<size_t>(g_textures.handles.size(), 16); ++k)
+                log("nvn display input %zu: handle %llx texture %llx", k, (unsigned long long)g_textures.handles[k],
+                    (unsigned long long)g_textures.resolved[k].texture);
+        }
+    }
     if (danganronpa_motion_blur_skipped(t, indexed, c, *vs, fs)) return false;
     {   // NX_DUMP_DRAW_TEXTURES=<fs hash>@<draw>: the images the first such draw samples, snapshotted (frames/00000_c00000NN)
         static const char* env = std::getenv("NX_DUMP_DRAW_TEXTURES");
