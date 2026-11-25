@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <atomic>
 #include <cerrno>
+#include <charconv>
 #include <cmath>
 #include <condition_variable>
 #include <cstring>
@@ -623,9 +624,41 @@ namespace {
 
 struct sigaction g_previous[32];  // the handlers before ours (debuggerd's)
 
+// Resolve executable addresses without taking the dynamic linker's lock in a signal handler.
+void log_fault_maps(uint64_t pc, uint64_t lr) {
+    int fd = open("/proc/self/maps", O_RDONLY | O_CLOEXEC);
+    if (fd < 0) return;
+    char buf[4096], line[512];
+    size_t used = 0;
+    ssize_t n;
+    while ((n = read(fd, buf, sizeof buf)) > 0) {
+        for (ssize_t i = 0; i < n; ++i) {
+            if (buf[i] != '\n') {
+                if (used < sizeof line - 1) line[used++] = buf[i];
+                continue;
+            }
+            line[used] = 0;
+            uint64_t start = 0, end = 0;
+            const auto first = std::from_chars(line, line + used, start, 16);
+            if (first.ec == std::errc{} && first.ptr < line + used && *first.ptr == '-' &&
+                    std::from_chars(first.ptr + 1, line + used, end, 16).ec == std::errc{} &&
+                    ((pc >= start && pc < end) || (lr >= start && lr < end)))
+                nx::log("  fault context mapping: %s", line);
+            used = 0;
+        }
+    }
+    close(fd);
+}
+
 void crash(int sig, siginfo_t* info, void* uc) {
     if ((sig == SIGSEGV || sig == SIGBUS) && nx::plat::write_watch_fault(info->si_addr)) return;  // write_watch.cpp
     nx::log("CRASH: signal %d, fault address %p", sig, info->si_addr);
+#if defined(__aarch64__)
+    const auto& machine = static_cast<ucontext_t*>(uc)->uc_mcontext;
+    nx::log("  fault context pc %llx lr %llx sp %llx", (unsigned long long)machine.pc,
+            (unsigned long long)machine.regs[30], (unsigned long long)machine.sp);
+    log_fault_maps(machine.pc, machine.regs[30]);
+#endif
 #if NX_NCE
     // In the game's own code: its registers are in the signal's context, not in the thread's CPU.
     if (nx::self_thread()) {
