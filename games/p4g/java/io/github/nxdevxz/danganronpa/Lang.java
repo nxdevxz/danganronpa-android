@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.content.Context;
 
@@ -44,7 +44,7 @@ final class Lang {
         add("Off", "Desactivado", "Désactivé", "Aus");
         add("Game setup", "Preparación del juego", "Préparation du jeu", "Spieleinrichtung");
         add("Game file (.nsp / .xci)", "Archivo del juego (.nsp / .xci)", "Fichier du jeu (.nsp / .xci)", "Spieldatei (.nsp / .xci)");
-        add("P4G update .nsp (optional)", "Actualización de P4G .nsp (opcional)", "Mise à jour P4G .nsp (facultative)", "P4G-Update .nsp (optional)");
+        add("Danganronpa update .nsp (optional)", "Actualización de Danganronpa .nsp (opcional)", "Mise à jour Danganronpa .nsp (facultative)", "Danganronpa-Update .nsp (optional)");
         add("Keys (prod.keys)", "Claves (prod.keys)", "Clés (prod.keys)", "Schlüssel (prod.keys)");
         add("Quick settings", "Ajustes rápidos", "Réglages rapides", "Schnelleinstellungen");
         add("Configuration presets", "Preajustes de configuración", "Préréglages de configuration", "Konfigurationsprofile");

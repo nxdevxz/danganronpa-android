@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.Activity;
 import android.content.res.ColorStateList;
@@ -11,15 +11,15 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 /** Shared launcher palette; does not change the game's renderer or touch overlay. */
-final class P4gTheme {
-    static final int BACKGROUND = Color.rgb(18, 20, 24);
-    static final int PANEL = Color.rgb(35, 40, 51);
-    static final int YELLOW = Color.rgb(255, 208, 48);
-    static final int INK = Color.rgb(20, 20, 20);
-    static final int TEXT = Color.rgb(236, 238, 242);
-    static final int MUTED = Color.rgb(185, 194, 211);
+final class LauncherTheme {
+    static final int BACKGROUND = Color.rgb(14, 12, 16);
+    static final int PANEL = Color.rgb(38, 32, 40);
+    static final int ACCENT = Color.rgb(255, 54, 148);
+    static final int INK = Color.rgb(17, 12, 16);
+    static final int TEXT = Color.rgb(251, 247, 246);
+    static final int MUTED = Color.rgb(203, 186, 197);
 
-    private P4gTheme() {}
+    private LauncherTheme() {}
 
     static int dp(android.content.Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
@@ -40,8 +40,9 @@ final class P4gTheme {
                 dp(button.getContext(), 14), dp(button.getContext(), 10));
         button.setBackgroundTintList(null);
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(primary ? YELLOW : PANEL);
-        shape.setCornerRadius(dp(button.getContext(), 16));
+        shape.setColor(primary ? ACCENT : PANEL);
+        shape.setCornerRadius(dp(button.getContext(), 3));
+        if (!primary) shape.setStroke(dp(button.getContext(), 1), 0xFF705665);
         button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x33FFFFFF), shape, null));
         button.setTextColor(new ColorStateList(
                 new int[][] {new int[] {-android.R.attr.state_enabled}, new int[] {}},

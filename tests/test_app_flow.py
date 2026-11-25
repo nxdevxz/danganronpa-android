@@ -8,7 +8,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-PACKAGE = "io/github/p4grecomp"
+PACKAGE = "io/github/nxdevxz/danganronpa"
 STUBS = {
     "android/net/Uri.java": '''package android.net;
 public class Uri { public String path; public static Uri parse(String s) { Uri u=new Uri(); u.path=s; return u; } }''',
@@ -42,7 +42,7 @@ public class DocumentsContract {
 }''',
     "android/util/Log.java": '''package android.util;
 public class Log {public static int w(String tag,String message,Throwable error){return 0;}}''',
-    PACKAGE + "/Launcher.java": '''package io.github.p4grecomp;
+    PACKAGE + "/Launcher.java": '''package io.github.nxdevxz.danganronpa;
 final class Launcher {static java.io.File dataDir(){return new java.io.File(System.getProperty("p4g.test.root"));}}''',
 }
 
@@ -63,5 +63,5 @@ with tempfile.TemporaryDirectory(prefix="p4g-java-tests-", dir=test_temp) as fol
     sources.append(str(ROOT / "tests/AppFlowTest.java"))
     sources.append(str(ROOT / "tests/ModFilesTest.java"))
     subprocess.run(["javac", "-encoding", "UTF-8", "--release", "8", "-d", str(temp / "classes"), *sources], check=True)
-    subprocess.run(["java", "-Djava.io.tmpdir=" + str(temp), "-cp", str(temp / "classes"), "io.github.p4grecomp.AppFlowTest"], check=True)
-    subprocess.run(["java", "-Djava.io.tmpdir=" + str(temp), "-cp", str(temp / "classes"), "io.github.p4grecomp.ModFilesTest"], check=True)
+    subprocess.run(["java", "-Djava.io.tmpdir=" + str(temp), "-cp", str(temp / "classes"), "io.github.nxdevxz.danganronpa.AppFlowTest"], check=True)
+    subprocess.run(["java", "-Djava.io.tmpdir=" + str(temp), "-cp", str(temp / "classes"), "io.github.nxdevxz.danganronpa.ModFilesTest"], check=True)

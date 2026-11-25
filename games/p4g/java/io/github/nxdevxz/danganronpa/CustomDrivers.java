@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.content.Context;
 import android.net.Uri;
@@ -118,7 +118,7 @@ final class CustomDrivers {
                 return new Driver(active, family + " (previous import)", "", minApi);
             }
         } catch (Exception e) {
-            Log.w("P4G-Launch", "Could not read saved driver metadata", e);
+            Log.w("Danganronpa-Launch", "Could not read saved driver metadata", e);
         }
         return null;
     }
@@ -358,6 +358,6 @@ final class CustomDrivers {
                     return FileVisitResult.CONTINUE;
                 }
             });
-        } catch (IOException e) { Log.w("P4G-Launch", "Driver cleanup pending", e); }
+        } catch (IOException e) { Log.w("Danganronpa-Launch", "Driver cleanup pending", e); }
     }
 }

@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.Dialog;
 import android.content.Context;
@@ -19,8 +19,8 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 /** Dark launcher-style replacement for platform AlertDialog. */
-final class P4gDialog extends Dialog {
-    private P4gDialog(Context context, Builder spec) {
+final class LauncherDialog extends Dialog {
+    private LauncherDialog(Context context, Builder spec) {
         super(context);
         requestWindowFeature(Window.FEATURE_NO_TITLE);
         setCancelable(spec.cancelable);
@@ -32,19 +32,19 @@ final class P4gDialog extends Dialog {
         int pad = dp(context, 20);
         card.setPadding(pad, pad, pad, pad);
         GradientDrawable shape = new GradientDrawable();
-        shape.setColor(P4gTheme.BACKGROUND);
-        shape.setCornerRadius(dp(context, 22));
-        shape.setStroke(dp(context, 1), 0x554C5566);
+        shape.setColor(LauncherTheme.BACKGROUND);
+        shape.setCornerRadius(dp(context, 4));
+        shape.setStroke(dp(context, 1), LauncherTheme.ACCENT);
         card.setBackground(shape);
 
         if (spec.title != null && spec.title.length() != 0) {
-            TextView title = text(context, spec.title, 21, P4gTheme.YELLOW);
+            TextView title = text(context, spec.title, 21, LauncherTheme.ACCENT);
             title.setTypeface(android.graphics.Typeface.create("sans-serif-medium", android.graphics.Typeface.NORMAL));
             title.setPadding(0, 0, 0, dp(context, 10));
             card.addView(title);
         }
         if (spec.message != null && spec.message.length() != 0) {
-            TextView message = text(context, spec.message, 15, P4gTheme.TEXT);
+            TextView message = text(context, spec.message, 15, LauncherTheme.TEXT);
             message.setLineSpacing(0, 1.12f);
             message.setPadding(0, 0, 0, dp(context, 12));
             card.addView(message);
@@ -93,11 +93,11 @@ final class P4gDialog extends Dialog {
             if (spec.multiChecked != null) {
                 CheckBox choice = new CheckBox(getContext());
                 choice.setText(spec.items[i]);
-                choice.setTextColor(P4gTheme.TEXT);
+                choice.setTextColor(LauncherTheme.TEXT);
                 choice.setTextSize(15);
                 choice.setMinHeight(dp(getContext(), 44));
                 choice.setChecked(spec.multiChecked[i]);
-                choice.setButtonTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+                choice.setButtonTintList(android.content.res.ColorStateList.valueOf(LauncherTheme.ACCENT));
                 choice.setOnCheckedChangeListener((button, checked) -> {
                     spec.multiChecked[index] = checked;
                     if (spec.multiClick != null) spec.multiClick.onClick(this, index, checked);
@@ -106,23 +106,23 @@ final class P4gDialog extends Dialog {
             } else if (spec.singleChecked >= 0) {
                 RadioButton choice = new RadioButton(getContext());
                 choice.setText(spec.items[i]);
-                choice.setTextColor(P4gTheme.TEXT);
+                choice.setTextColor(LauncherTheme.TEXT);
                 choice.setTextSize(15);
                 choice.setMinHeight(dp(getContext(), 44));
                 choice.setChecked(i == spec.singleChecked);
-                choice.setButtonTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+                choice.setButtonTintList(android.content.res.ColorStateList.valueOf(LauncherTheme.ACCENT));
                 choice.setOnClickListener(v -> {
                     if (spec.itemClick != null) spec.itemClick.onClick(this, index);
                 });
                 card.addView(choice, new LinearLayout.LayoutParams(-1, -2));
             } else if (spec.itemClick == null) {
-                TextView item = text(getContext(), spec.items[i], 14, P4gTheme.TEXT);
+                TextView item = text(getContext(), spec.items[i], 14, LauncherTheme.TEXT);
                 item.setPadding(dp(getContext(), 4), dp(getContext(), 9), dp(getContext(), 4), dp(getContext(), 9));
                 card.addView(item, new LinearLayout.LayoutParams(-1, -2));
             } else {
                 Button item = new Button(getContext());
                 item.setText(spec.items[i]);
-                P4gTheme.button(item, false);
+                LauncherTheme.button(item, false);
                 LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-1, -2);
                 layout.bottomMargin = dp(getContext(), 6);
                 card.addView(item, layout);
@@ -137,7 +137,7 @@ final class P4gDialog extends Dialog {
     private Button action(CharSequence label, boolean primary, int which, DialogInterface.OnClickListener listener) {
         Button button = new Button(getContext());
         button.setText(label);
-        P4gTheme.button(button, primary);
+        LauncherTheme.button(button, primary);
         LinearLayout.LayoutParams layout = new LinearLayout.LayoutParams(-2, -2);
         layout.leftMargin = dp(getContext(), 8);
         button.setLayoutParams(layout);
@@ -156,7 +156,7 @@ final class P4gDialog extends Dialog {
         return view;
     }
 
-    private static int dp(Context context, int value) { return P4gTheme.dp(context, value); }
+    private static int dp(Context context, int value) { return LauncherTheme.dp(context, value); }
 
     static final class Builder {
         final Context context;
@@ -196,7 +196,7 @@ final class P4gDialog extends Dialog {
         Builder setMultiChoiceItems(CharSequence[] values, boolean[] checked, DialogInterface.OnMultiChoiceClickListener listener) {
             items = values; multiChecked = checked; multiClick = listener; return this;
         }
-        P4gDialog create() { return new P4gDialog(context, this); }
-        P4gDialog show() { P4gDialog dialog = create(); dialog.show(); return dialog; }
+        LauncherDialog create() { return new LauncherDialog(context, this); }
+        LauncherDialog show() { LauncherDialog dialog = create(); dialog.show(); return dialog; }
     }
 }

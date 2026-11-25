@@ -792,7 +792,7 @@ static jlong native_frames(JNIEnv*, jclass) { return jlong(nx::g_frame.load()); 
 extern "C" JNIEXPORT jlong JNICALL Java_io_github_belmantegu_wonderrecomp_GameActivity_nativeFrames(JNIEnv*, jclass) {
     return native_frames(nullptr, nullptr);
 }
-extern "C" JNIEXPORT jlong JNICALL Java_io_github_p4grecomp_GameActivity_nativeFrames(JNIEnv*, jclass) {
+extern "C" JNIEXPORT jlong JNICALL Java_io_github_nxdevxz_danganronpa_GameActivity_nativeFrames(JNIEnv*, jclass) {
     return native_frames(nullptr, nullptr);
 }
 

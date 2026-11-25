@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import java.io.*;
 import java.nio.file.*;
@@ -136,7 +136,7 @@ final class InstalledGameFiles {
         String id = buildId(new File(current, "exefs/main"));
         if (id.equals("C433D980688380A642C086072F620928")) return "1.0.0";
         if (id.equals("66B2B6D53549A6364A43F69E282E3882")) return "1.0.1 / 1.0.2";
-        throw new IOException("Unsupported P4G revision (Build ID " + id + ")");
+        throw new IOException("Unsupported Danganronpa revision (Build ID " + id + ")");
     }
 
     /** Small launch check; the full file list is checked off the UI thread by ready(). */

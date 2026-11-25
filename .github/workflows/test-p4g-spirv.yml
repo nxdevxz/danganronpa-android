@@ -1,5 +1,5 @@
 
-name: Test P4G GXP to SPIR-V
+name: Test Danganronpa GXP to SPIR-V
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - name: Checkout P4G
+      - name: Checkout Danganronpa
         uses: actions/checkout@v4
 
       - name: Verify GXP sample
@@ -91,7 +91,7 @@ jobs:
 
           cd test-results
 
-          echo "Testing P4G shader: $GXP"
+          echo "Testing Danganronpa shader: $GXP"
 
           set +e
 
@@ -165,7 +165,7 @@ jobs:
         run: |
           mkdir -p test-results
 
-          echo "P4G GXP to SPIR-V test" \
+          echo "Danganronpa GXP to SPIR-V test" \
             > test-results/summary.txt
 
           echo "Input: V00000000_00000000.gxp" \
@@ -191,7 +191,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-vita3k-spirv-test
+          name: danganronpa-vita3k-spirv-test
           path: test-results/
           if-no-files-found: warn
 

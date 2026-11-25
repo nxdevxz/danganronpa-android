@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.Activity;
 import android.content.Context;
@@ -57,7 +57,7 @@ public class ControlsEditor extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         Lang.load(this);
-        P4gTheme.apply(this);
+        LauncherTheme.apply(this);
         Map<String, String> config = Launcher.readConfig(configFile());
         try {
             sizeScale = Math.max(50, Math.min(160, Integer.parseInt(config.get("NX_TOUCH_SIZE")))) / 100f;
@@ -68,7 +68,7 @@ public class ControlsEditor extends Activity {
         parseHidden(config.get("NX_TOUCH_HIDDEN"));
 
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(P4gTheme.BACKGROUND);
+        root.setBackgroundColor(LauncherTheme.BACKGROUND);
         view = new EditorView(this);
         root.addView(view, new FrameLayout.LayoutParams(-1, -1));
 
@@ -78,19 +78,19 @@ public class ControlsEditor extends Activity {
         TextView help = new TextView(this);
         help.setText(t("Arraste os controles para onde quiser.\nO direcional e A B X Y se movem em grupo. Vermelho indica sobreposição.",
                 "Drag the controls where you want them.\nThe d-pad and A B X Y move together. Red: they touch."));
-        help.setTextColor(P4gTheme.TEXT);
+        help.setTextColor(LauncherTheme.TEXT);
         help.setTextSize(15);
         help.setGravity(Gravity.CENTER);
         middle.addView(help);
-        Button visibility = button(t("Mostrar / ocultar botões", "Show / hide buttons"), Color.rgb(70, 70, 70));
+        Button visibility = button(t("Mostrar / ocultar botões", "Show / hide buttons"), LauncherTheme.PANEL);
         visibility.setOnClickListener(v -> showVisibility());
         middle.addView(visibility);
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER);
         bar.setPadding(0, dp(12), 0, 0);
-        Button restore = button(t("Redefinir", "Reset"), Color.rgb(70, 70, 70));
-        Button cancel = button(t("Cancelar", "Cancel"), Color.rgb(70, 70, 70));
-        Button save = button(t("Salvar", "Save"), P4gTheme.YELLOW);
+        Button restore = button(t("Redefinir", "Reset"), LauncherTheme.PANEL);
+        Button cancel = button(t("Cancelar", "Cancel"), LauncherTheme.PANEL);
+        Button save = button(t("Salvar", "Save"), LauncherTheme.ACCENT);
         restore.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -148,7 +148,7 @@ public class ControlsEditor extends Activity {
         Button b = new Button(this);
         b.setText(text);
         b.setAllCaps(false);
-        P4gTheme.button(b, color == P4gTheme.YELLOW);
+        LauncherTheme.button(b, color == LauncherTheme.ACCENT);
         b.setMinWidth(dp(120));
         return b;
     }
@@ -189,7 +189,7 @@ public class ControlsEditor extends Activity {
             labels[k] = i >= 10 && i <= 13 ? t("Direcional ", "D-pad ") + LABELS[i] : LABELS[i];
             shown[k++] = !hidden[i];
         }
-        P4gDialog dialog = new P4gDialog.Builder(this)
+        LauncherDialog dialog = new LauncherDialog.Builder(this)
                 .setTitle(t("Botões visíveis", "Visible buttons"))
                 .setMultiChoiceItems(labels, shown, (d, which, checked) -> shown[which] = checked)
                 .setPositiveButton(t("Aplicar", "Apply"), (d, which) -> {

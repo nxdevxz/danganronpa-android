@@ -1,5 +1,5 @@
 
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 /**
  * Extracts the player's game and prepares a local Maxwell shader cache in a private staging directory.

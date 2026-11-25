@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.os.Handler;
 import android.os.HandlerThread;
@@ -76,9 +76,9 @@ final class PerformanceOverlay {
         panel.setFocusable(false);
         panel.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         paint.setTypeface(android.graphics.Typeface.MONOSPACE);
-        baseTextSize = P4gTheme.dp(activity, 10) * sizeScale;
+        baseTextSize = LauncherTheme.dp(activity, 10) * sizeScale;
         paint.setTextSize(baseTextSize);
-        paint.setColor(P4gTheme.YELLOW);
+        paint.setColor(LauncherTheme.ACCENT);
         background.setColor(0xB3141414);
         activity.addContentView(panel, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -126,7 +126,7 @@ final class PerformanceOverlay {
     void start() {
         if (panel == null || thread != null) return;
         final int token = ++generation;
-        thread = new HandlerThread("P4G-overlay", android.os.Process.THREAD_PRIORITY_BACKGROUND);
+        thread = new HandlerThread("Danganronpa-overlay", android.os.Process.THREAD_PRIORITY_BACKGROUND);
         thread.start();
         worker = new Handler(thread.getLooper());
         final Handler sampler = worker;
@@ -166,8 +166,8 @@ final class PerformanceOverlay {
             canvas.drawColor(Color.TRANSPARENT, PorterDuff.Mode.CLEAR);
             String[] lines = text.split("\\n");
             float shortSide = Math.max(1.0f, Math.min(canvas.getWidth(), canvas.getHeight()));
-            float edge = Math.min(P4gTheme.dp(activity, 6) * sizeScale, shortSide * 0.02f);
-            float pad = Math.min(P4gTheme.dp(activity, 5) * sizeScale, shortSide * 0.027f);
+            float edge = Math.min(LauncherTheme.dp(activity, 6) * sizeScale, shortSide * 0.02f);
+            float pad = Math.min(LauncherTheme.dp(activity, 5) * sizeScale, shortSide * 0.027f);
             // requestPhysicalBuffer keeps this canvas in window pixels. The fit below remains a
             // safety net for unusual multi-window bounds and long localized metric strings.
             paint.setTextSize(baseTextSize);

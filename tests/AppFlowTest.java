@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import java.io.*;
 import java.nio.file.*;
@@ -124,7 +124,7 @@ public class AppFlowTest {
         return result;
     }
     static void migrationTests(File parent) throws Exception {
-        File old = new File(parent, "migration-rename/shared"), app = new File(parent, "migration-rename/Android/data/io.github.p4grecomp/files");
+        File old = new File(parent, "migration-rename/shared"), app = new File(parent, "migration-rename/Android/data/io.github.nxdevxz.danganronpa/files");
         smallInstallation(old, "rename game");
         text(new File(old, "user/save/data0001.bin"), "save"); text(new File(old, "mods/translation/romfs/data.cpk"), "mod");
         text(new File(old, "config.txt"), "config");
@@ -173,7 +173,7 @@ public class AppFlowTest {
         check(SavePaths.target("save/../data0001.bin", "save/") == null);
         check(SavePaths.target("/data0001.bin", "") == null);
         check(SavePaths.target("save/notes.txt", "save/") == null);
-        check(SavePaths.prefix(Arrays.asList("DATA01/DATA.DAT")) == null); // P5R is not P4G.
+        check(SavePaths.prefix(Arrays.asList("DATA01/DATA.DAT")) == null); // P5R is not Danganronpa.
         try {
             SavePaths.prefix(Arrays.asList("first/data0001.bin", "second/data0002.bin"));
             throw new AssertionError("Ambiguous saves accepted");
@@ -189,7 +189,7 @@ public class AppFlowTest {
         check(new String(Files.readAllBytes(new File(temp, "user/" + result.backup + "/data0001.bin").toPath()), "UTF-8").equals("original"));
         check(!new File(SaveFiles.saveDir(), "notes.txt").exists());
         File exported = SaveFiles.export();
-        check(exported.getName().startsWith("P4G-saves-"));
+        check(exported.getName().startsWith("Danganronpa-saves-"));
         check(SaveFiles.importZip(resolver, android.net.Uri.parse(exported.getPath())).files == 2);
         byte[] before = Files.readAllBytes(existing.toPath());
         try {

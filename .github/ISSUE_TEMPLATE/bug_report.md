@@ -20,7 +20,7 @@ assignees: ""
 What you did, what you expected, and what happened instead. Where in the game (menu, scene, dungeon...).
 
 **Log**
-Open **Diagnostics → Logs → Export** in the P4G launcher after reproducing the problem and attach the exported
-`P4G-logs-...txt` file. Review it for personal information before uploading it.
+Open **Diagnostics → Logs → Export** in the Danganronpa launcher after reproducing the problem and attach the exported
+`Danganronpa-logs-...txt` file. Review it for personal information before uploading it.
 
 Please do not attach game files, keys or saves of other people. No game files or keys are provided here.

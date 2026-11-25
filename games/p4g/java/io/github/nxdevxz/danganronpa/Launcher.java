@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.Activity;
 import android.content.ClipData;
@@ -50,7 +50,7 @@ import java.util.Map;
 
 /** Routes to preparation or the main menu after checking the actual files. */
 public class Launcher extends Activity {
-    static final String DATA = "Persona 4 Golden";
+    static final String DATA = "Danganronpa THH";
     static final boolean DEFAULT_LANDSCAPE = true;
 
     static final class Option {
@@ -154,7 +154,7 @@ public class Launcher extends Activity {
         String[] modes = {t("Instalar em Android/data", "Install in Android/data"),
                 t("Rodar pelo NSP/XCI", "Run from NSP/XCI")};
         addRow(layout, t("Modo de preparação", "Setup mode"), modes[directMode() ? 1 : 0], v ->
-                new P4gDialog.Builder(this).setTitle(t("Modo de preparação", "Setup mode"))
+                new LauncherDialog.Builder(this).setTitle(t("Modo de preparação", "Setup mode"))
                         .setSingleChoiceItems(modes, directMode() ? 1 : 0, (dialog, index) -> {
                             dialog.dismiss();
                             boolean direct = index == 1;
@@ -169,7 +169,7 @@ public class Launcher extends Activity {
     volatile InstalledGameFiles.RecentCheck installedCheck = new InstalledGameFiles.RecentCheck();
 
     void recoverDirectUpdate() {
-        new P4gDialog.Builder(this)
+        new LauncherDialog.Builder(this)
                 .setTitle(t("Atualização não encontrada", "Update not found"))
                 .setMessage(t("Selecione novamente o NSP da atualização ou prepare apenas o jogo base.",
                         "Select the update NSP again or prepare just the base game."))
@@ -227,8 +227,8 @@ public class Launcher extends Activity {
         String lower = name.toLowerCase(Locale.ROOT);
         if (!lower.endsWith(".nsp")) {
             tell(t("Arquivo inválido", "Not an update file"),
-                    t("Escolha a atualização do P4G em formato .nsp.",
-                            "Choose the P4G update in .nsp format."));
+                    t("Escolha a atualização do Danganronpa em formato .nsp.",
+                            "Choose the Danganronpa update in .nsp format."));
             return;
         }
         try {
@@ -290,7 +290,7 @@ public class Launcher extends Activity {
         }
         Lang.load(this);
         applyLauncherOrientation();
-        P4gTheme.apply(this);
+        LauncherTheme.apply(this);
         if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
@@ -406,14 +406,14 @@ public class Launcher extends Activity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
-        background.setColor(P4gTheme.PANEL);
-        background.setCornerRadius(dp(14));
+        background.setColor(LauncherTheme.PANEL);
+        background.setCornerRadius(dp(3));
         card.setBackground(background);
         LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
         spacing.bottomMargin = dp(8);
         root.addView(card, spacing);
         Button header = new Button(this);
-        P4gTheme.button(header, false);
+        LauncherTheme.button(header, false);
         compactButton(header);
         header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
         header.setTextSize(15);
@@ -423,7 +423,7 @@ public class Launcher extends Activity {
         body.setPadding(dp(10), dp(4), dp(10), dp(8));
         TextView hint = new TextView(this);
         hint.setText(subtitle);
-        hint.setTextColor(P4gTheme.MUTED);
+        hint.setTextColor(LauncherTheme.MUTED);
         hint.setTextSize(12);
         hint.setPadding(0, 0, 0, dp(4));
         hint.setVisibility(subtitle.isEmpty() ? View.GONE : View.VISIBLE);
@@ -458,7 +458,7 @@ public class Launcher extends Activity {
                     applyLauncherOrientation();
                 });
         addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
-                t("Redefinir", "Reset"), v -> new P4gDialog.Builder(this)
+                t("Redefinir", "Reset"), v -> new LauncherDialog.Builder(this)
                         .setMessage(t("Redefinir o idioma e a orientação do launcher?",
                                 "Reset the launcher language and orientation?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -474,32 +474,38 @@ public class Launcher extends Activity {
     void build(boolean ready) {
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(P4gTheme.BACKGROUND);
+        root.setBackgroundColor(LauncherTheme.BACKGROUND);
         root.setPadding(dp(18), dp(10), dp(18), dp(14));
 
         TextView title = new TextView(this);
-        title.setText("Persona 4 Golden");
-        title.setTextColor(P4gTheme.YELLOW);
+        title.setText("DANGANRONPA");
+        title.setTextColor(LauncherTheme.ACCENT);
         title.setPadding(0, dp(4), 0, dp(2));
-        title.setTextSize(25);
-        title.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        title.setTextSize(32);
+        title.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC));
         root.addView(title, new LinearLayout.LayoutParams(-1, -2));
         TextView version = new TextView(this);
-        version.setText("BETA  ·  0.5.2");
-        version.setTextColor(P4gTheme.MUTED);
+        version.setText("TRIGGER HAPPY HAVOC  /  0.0.1  ·  " + t("EM TESTES", "EXPERIMENTAL"));
+        version.setTextColor(LauncherTheme.TEXT);
+        version.setLetterSpacing(0.08f);
         version.setTextSize(12);
         version.setTypeface(Typeface.DEFAULT_BOLD);
         version.setPadding(0, dp(3), 0, 0);
         root.addView(version);
+        View rule = new View(this);
+        rule.setBackgroundColor(LauncherTheme.ACCENT);
+        LinearLayout.LayoutParams ruleLayout = new LinearLayout.LayoutParams(-1, dp(2));
+        ruleLayout.topMargin = dp(8);
+        root.addView(rule, ruleLayout);
 
         status = new TextView(this);
-        status.setTextColor(P4gTheme.MUTED);
+        status.setTextColor(LauncherTheme.MUTED);
         status.setTextSize(13);
         status.setPadding(0, dp(4), 0, dp(8));
         root.addView(status);
 
         if (!ready) {
-        P4gTheme.section(root, t("Preparação do jogo", "Game setup"));
+        LauncherTheme.section(root, t("Preparação do jogo", "Game setup"));
         addStorageMode(root);
         addRow(root, t("Arquivo do jogo (.nsp / .xci)", "Game file (.nsp / .xci)"), t("Escolher", "Choose"),
                 new View.OnClickListener() {
@@ -508,7 +514,7 @@ public class Launcher extends Activity {
                         pick(PICK_GAME, "*/*", false);
                     }
                 });
-        addRow(root, t("Atualização do P4G .nsp (opcional)", "P4G update .nsp (optional)"),
+        addRow(root, t("Atualização do Danganronpa .nsp (opcional)", "Danganronpa update .nsp (optional)"),
                 updateUri() == null ? t("Escolher", "Choose") : updateName(), v -> pick(PICK_UPDATE, "*/*", false));
         addRow(root, t("Chaves (prod.keys)", "Keys (prod.keys)"), t("Escolher", "Choose"), new View.OnClickListener() {
             @Override
@@ -519,7 +525,7 @@ public class Launcher extends Activity {
 
 
         play = new Button(this);
-        P4gTheme.button(play, true);
+        LauncherTheme.button(play, true);
         play.setAllCaps(false);
         play.setText(t("Preparar jogo", "Prepare"));
         play.setTextSize(18);
@@ -533,7 +539,7 @@ public class Launcher extends Activity {
         });
         addLauncherSettings(root);
         ScrollView setup = new ScrollView(this);
-        setup.setBackgroundColor(P4gTheme.BACKGROUND);
+        setup.setBackgroundColor(LauncherTheme.BACKGROUND);
         setup.setFillViewport(true);
         setup.addView(root);
         setContentView(setup);
@@ -543,7 +549,7 @@ public class Launcher extends Activity {
 
         play = new Button(this);
         play.setTextSize(18);
-        P4gTheme.button(play, true);
+        LauncherTheme.button(play, true);
         play.setText(t("Jogar", "Play"));
         LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(54));
         playLayout.leftMargin = dp(18);
@@ -558,21 +564,21 @@ public class Launcher extends Activity {
         LinearLayout overlay = settingsGroup(root, "overlay", t("Monitor de desempenho", "Performance monitor"), "", false);
         LinearLayout support = settingsGroup(root, "more", t("Mais opções", "More options"), "", false);
         addRow(quick, t("Predefinição gráfica", "Graphics preset"), t("Escolher", "Choose"), v ->
-                new P4gDialog.Builder(this).setTitle(t("Predefinição gráfica", "Graphics preset"))
+                new LauncherDialog.Builder(this).setTitle(t("Predefinição gráfica", "Graphics preset"))
                         .setItems(new String[] {t("Desempenho", "Performance"), t("Equilibrado", "Balanced"), t("Qualidade", "Quality")},
                                 (dialog, which) -> applyPreset(new String[] {"performance", "normal", "quality"}[which])).show());
         addRow(support, t("Perfis salvos", "Saved profiles"), t("Escolher", "Choose"), v ->
-                new P4gDialog.Builder(this).setTitle(t("Perfis salvos", "Saved profiles"))
+                new LauncherDialog.Builder(this).setTitle(t("Perfis salvos", "Saved profiles"))
                         .setItems(new String[] {t("Perfil 1", "Profile 1"), t("Perfil 2", "Profile 2"), t("Perfil 3", "Profile 3")},
                                 (dialog, which) -> showProfile(which + 1)).show());
 
-        P4gTheme.section(content, t("Atualização do jogo", "Game update"));
+        LauncherTheme.section(content, t("Atualização do jogo", "Game update"));
         addStorageMode(content);
         TextView updateHelp = new TextView(this);
         updateHelp.setText(directMode() ? t("Mantenha o jogo base e o update acessíveis para jogar.", "Keep the base game and update accessible to play.") : t(
                 "Para aplicar o update, selecione novamente o NSP/XCI original e o update NSP. A atualização depende de blocos do jogo base. Depois da preparação, os arquivos NSP não serão necessários para jogar.",
                 "To apply an update, select the original NSP/XCI again and the update NSP. A Switch update depends on blocks from the base game and cannot use only the already extracted files. Neither NSP is needed to play after preparation finishes."));
-        updateHelp.setTextColor(Color.LTGRAY);
+        updateHelp.setTextColor(LauncherTheme.MUTED);
         updateHelp.setTextSize(14);
         updateHelp.setPadding(0, dp(4), 0, dp(8));
         content.addView(updateHelp);
@@ -587,25 +593,25 @@ public class Launcher extends Activity {
             else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
             else prepare();
         });
-        P4gTheme.section(content, t("Saves e mods", "Saves & mods"));
+        LauncherTheme.section(content, t("Saves e mods", "Saves & mods"));
         LinearLayout diagnostics = settingsGroup(support, "logs", t("Logs e diagnóstico", "Logs & diagnostics"), "", false);
-        P4gTheme.section(support, t("Comunidade", "Community"));
+        LauncherTheme.section(support, t("Comunidade", "Community"));
         addRow(support, "GitHub", t("Abrir", "Open"),
-                v -> openExternal("https://github.com/nxdevxz/p4g-android"));
+                v -> openExternal("https://github.com/nxdevxz/danganronpa-android"));
         addRow(support, "Discord", t("Entrar", "Join"),
                 v -> openExternal("https://discord.gg/yF6FtNK6rM"));
         addRow(support, t("Reportar um problema", "Report an issue"), t("Abrir", "Open"),
-                v -> openExternal("https://github.com/nxdevxz/p4g-android/issues/new/choose"));
+                v -> openExternal("https://github.com/nxdevxz/danganronpa-android/issues/new/choose"));
         for (final Option o : options) {
             String group = optionGroup(o.key);
             if (isOverlayToggle(o.key)) {
                 CheckBox toggle = new CheckBox(this);
                 toggle.setText(t(o.pt, o.en));
-                toggle.setTextColor(P4gTheme.TEXT);
+                toggle.setTextColor(LauncherTheme.TEXT);
                 toggle.setTextSize(16);
                 toggle.setMinHeight(dp(44));
                 toggle.setPadding(dp(4), 0, dp(4), 0);
-                toggle.setButtonTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+                toggle.setButtonTintList(android.content.res.ColorStateList.valueOf(LauncherTheme.ACCENT));
                 toggle.setChecked("1".equals(o.values[o.pick]));
                 toggle.setTag(o);
                 toggle.setOnClickListener(v -> {
@@ -625,7 +631,7 @@ public class Launcher extends Activity {
             name.setTextSize(16);
             row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
             final Button value = new Button(this);
-            P4gTheme.button(value, false);
+            LauncherTheme.button(value, false);
             compactButton(value);
             value.setAllCaps(false);
             value.setMinWidth(dp(110));
@@ -634,7 +640,7 @@ public class Launcher extends Activity {
             value.setOnClickListener(v -> {
                 String[] labels = new String[o.values.length];
                 for (int i = 0; i < labels.length; i++) labels[i] = t(o.labelsPt[i], o.labelsEn[i]);
-                new P4gDialog.Builder(this).setTitle(t(o.pt, o.en)).setSingleChoiceItems(labels, o.pick, (dialog, which) -> {
+                new LauncherDialog.Builder(this).setTitle(t(o.pt, o.en)).setSingleChoiceItems(labels, o.pick, (dialog, which) -> {
                     dialog.dismiss();
                     o.pick = which;
                     if (save()) value.setText(label(o));
@@ -657,7 +663,7 @@ public class Launcher extends Activity {
         editName.setTextSize(16);
         edit.addView(editName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button editButton = new Button(this);
-        P4gTheme.button(editButton, false);
+        LauncherTheme.button(editButton, false);
         compactButton(editButton);
         editButton.setAllCaps(false);
         editButton.setMinWidth(dp(110));
@@ -693,14 +699,14 @@ public class Launcher extends Activity {
         savesName.setTextSize(16);
         saves.addView(savesName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button importButton = new Button(this);
-        P4gTheme.button(importButton, false);
+        LauncherTheme.button(importButton, false);
         compactButton(importButton);
         importButton.setAllCaps(false);
         importButton.setMinWidth(dp(88));
         importButton.setText(t("Importar", "Import"));
         saves.addView(importButton);
         Button exportButton = new Button(this);
-        P4gTheme.button(exportButton, false);
+        LauncherTheme.button(exportButton, false);
         compactButton(exportButton);
         exportButton.setAllCaps(false);
         exportButton.setMinWidth(dp(88));
@@ -739,7 +745,7 @@ public class Launcher extends Activity {
         transName.setTextSize(16);
         transRow.addView(transName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button transButton = new Button(this);
-        P4gTheme.button(transButton, false);
+        LauncherTheme.button(transButton, false);
         compactButton(transButton);
         transButton.setAllCaps(false);
         transButton.setMinWidth(dp(110));
@@ -759,12 +765,12 @@ public class Launcher extends Activity {
         addModsRow(content);
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setBackgroundColor(P4gTheme.BACKGROUND);
+        scroll.setBackgroundColor(LauncherTheme.BACKGROUND);
         scroll.setFillViewport(true);
         scroll.addView(root);
         LinearLayout screen = new LinearLayout(this);
         screen.setOrientation(LinearLayout.VERTICAL);
-        screen.setBackgroundColor(P4gTheme.BACKGROUND);
+        screen.setBackgroundColor(LauncherTheme.BACKGROUND);
         screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         screen.addView(play, playLayout);
         setContentView(screen);
@@ -805,7 +811,7 @@ public class Launcher extends Activity {
 
     private void addResetRow(LinearLayout parent, String group) {
         addRow(parent, t("Redefinir configurações", "Reset settings"), t("Redefinir", "Reset"),
-                v -> new P4gDialog.Builder(this)
+                v -> new LauncherDialog.Builder(this)
                         .setMessage(t("Redefinir as configurações desta seção para o padrão?",
                                 "Reset this section's settings to defaults?"))
                         .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -817,7 +823,7 @@ public class Launcher extends Activity {
     }
 
     private void showLanguagePicker() {
-        new P4gDialog.Builder(this)
+        new LauncherDialog.Builder(this)
                 .setTitle(t("Idioma do launcher", "Launcher language"))
                 .setSingleChoiceItems(Lang.names(), Lang.currentIndex(), (dialog, which) -> {
                     Lang.select(this, which);
@@ -832,7 +838,7 @@ public class Launcher extends Activity {
     private void showProfile(int slot) {
         SharedPreferences profile = getSharedPreferences("profile_" + slot, MODE_PRIVATE);
         String title = t("Perfil ", "Profile ") + slot;
-        new P4gDialog.Builder(this).setTitle(title)
+        new LauncherDialog.Builder(this).setTitle(title)
                 .setItems(new String[] {t("Carregar", "Load"), t("Salvar configuração atual", "Save current settings")}, (dialog, action) -> {
                     if (action == 0) {
                         if (!profile.getBoolean("saved", false)) {
@@ -846,7 +852,7 @@ public class Launcher extends Activity {
                         save();
                         updateButtons(getWindow().getDecorView());
                     } else {
-                        new P4gDialog.Builder(this).setTitle(title)
+                        new LauncherDialog.Builder(this).setTitle(title)
                                 .setMessage(t("Salvar as opções atuais neste perfil? Substitui o perfil anterior.",
                                         "Save current options here? This replaces the previous profile."))
                                 .setNegativeButton(t("Cancelar", "Cancel"), null)
@@ -910,7 +916,7 @@ public class Launcher extends Activity {
                         base.equals(prefs().getString("direct_ready", "")) : access && installedReady();
             } catch (Exception e) {
                 storageProblem = String.valueOf(e.getMessage());
-                Log.w("P4G-Launch", "Could not check installed game data", e);
+                Log.w("Danganronpa-Launch", "Could not check installed game data", e);
             }
             final boolean ready = checkedReady;
             final String storageError = storageProblem;
@@ -949,7 +955,7 @@ public class Launcher extends Activity {
                     play.setText(updateMissing ? t("Resolver atualização", "Resolve update") : t("Preparar jogo", "Prepare"));
                 }
             });
-        }, "P4G-setup-check").start();
+        }, "Danganronpa-setup-check").start();
     }
 
     void updateButtons(View v) {
@@ -966,7 +972,7 @@ public class Launcher extends Activity {
     }
 
     void tell(String title, String message) {
-        new P4gDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
+        new LauncherDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
     }
 
     void openExternal(String url) {
@@ -978,11 +984,11 @@ public class Launcher extends Activity {
     }
 
     void askImport() {
-        new P4gDialog.Builder(this)
+        new LauncherDialog.Builder(this)
                 .setTitle(t("Importar saves", "Import saves"))
-                .setMessage(t("Escolha um arquivo ZIP ou uma pasta com saves do Persona 4 Golden. "
+                .setMessage(t("Escolha um arquivo ZIP ou uma pasta com saves do Danganronpa THH. "
                                 + "Seus saves atuais serão copiados antes da importação.",
-                        "Pick a ZIP file or a folder with Persona 4 Golden saves (for example, a ZIP exported earlier). Your current saves "
+                        "Pick a ZIP file or a folder with Danganronpa THH saves (for example, a ZIP exported earlier). Your current saves "
                                 + "are copied aside first."))
                 .setPositiveButton(t("Arquivo ZIP", "ZIP file"), new DialogInterface.OnClickListener() {
                     @Override
@@ -1012,7 +1018,7 @@ public class Launcher extends Activity {
             installedCheck = new InstalledGameFiles.RecentCheck();
             if (result == RESULT_OK && gameUri() != null) {
                 prefs().edit().putString(directMode() ? "direct_ready" : "p4g_prepared_uri", gameUri()).apply();
-                Log.i("P4G-Launch", "Local game installation complete");
+                Log.i("Danganronpa-Launch", "Local game installation complete");
             }
             refresh();
             return;
@@ -1067,11 +1073,11 @@ public class Launcher extends Activity {
                 refresh();
                 if (error != null) tell("Import failed", error);
                 else if (result == null) tell("No saves found",
-                    "Choose the folder or ZIP containing the P4G data0001.bin and data0001.binslot files. Include system.bin and system.binslot if they are in your backup.");
-                else tell("Saves imported", result.files + " files imported. Select Load Game in P4G." +
+                    "Choose the folder or ZIP containing the Danganronpa data0001.bin and data0001.binslot files. Include system.bin and system.binslot if they are in your backup.");
+                else tell("Saves imported", result.files + " files imported. Select Load Game in Danganronpa." +
                     (result.backup == null ? "" : "\n\nPrevious saves backed up to: user/" + result.backup));
             });
-        }, "P4G-save-import").start();
+        }, "Danganronpa-save-import").start();
     }
 
     private boolean importingDriver;
@@ -1101,14 +1107,14 @@ public class Launcher extends Activity {
                 String message = e.getMessage() == null ? e.toString() : e.getMessage();
                 runOnUiThread(() -> finishDriverImport(message));
             }
-        }, "P4G-driver-import").start();
+        }, "Danganronpa-driver-import").start();
     }
 
     private void finishDriverImport(String error) {
         importingDriver = false;
         if (isFinishing() || isDestroyed()) return;
         if (error != null) {
-            new P4gDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
+            new LauncherDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
                     .setPositiveButton("Back", (d, w) -> showDrivers()).show();
         } else {
             Toast.makeText(this, "Driver imported and selected.", Toast.LENGTH_SHORT).show();
@@ -1141,14 +1147,14 @@ public class Launcher extends Activity {
                 exportingLogs = false;
                 if (isFinishing() || isDestroyed()) return;
                 if (failure != null) tell(t("Não foi possível exportar os logs", "Could not export logs"), failure);
-                else new P4gDialog.Builder(this)
+                else new LauncherDialog.Builder(this)
                         .setTitle(t("Logs exportados", "Logs exported"))
                         .setMessage(Lang.f("Salvos em Downloads/%s.", "Saved to Downloads/%s.", file.name))
                         .setPositiveButton(t("Compartilhar", "Share"), (dialog, which) -> shareLogs(file))
                         .setNegativeButton(t("Fechar", "Close"), null)
                         .show();
             });
-        }, "P4G-log-export").start();
+        }, "Danganronpa-log-export").start();
     }
 
     private void shareLogs(DiagnosticLogs.Exported file) {
@@ -1337,7 +1343,7 @@ public class Launcher extends Activity {
                     tell(t("Erro ao importar CPK", "Could not import CPK"), failure);
                 }
             });
-        }, "P4G-cpk-import").start();
+        }, "Danganronpa-cpk-import").start();
     }
 
     private String copyCpk(Uri uri, String target) throws IOException {
@@ -1361,7 +1367,7 @@ public class Launcher extends Activity {
                         StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
                 return dataDir().toPath().relativize(new File(romfs, target).toPath()).toString().replace(File.separatorChar, '/');
             } finally {
-                if (staged.exists() && !staged.delete()) Log.w("P4G-Launch", "Could not remove staged CPK");
+                if (staged.exists() && !staged.delete()) Log.w("Danganronpa-Launch", "Could not remove staged CPK");
             }
         }
     }
@@ -1377,7 +1383,7 @@ public class Launcher extends Activity {
         name.setTextSize(16);
         row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
         Button b = new Button(this);
-        P4gTheme.button(b, false);
+        LauncherTheme.button(b, false);
         compactButton(b);
         b.setAllCaps(false);
         b.setMinWidth(dp(110));

@@ -1,5 +1,5 @@
 
-name: Build P4G Shader ARM64
+name: Build Danganronpa Shader ARM64
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ jobs:
     timeout-minutes: 45
 
     steps:
-      - name: Checkout P4G
+      - name: Checkout Danganronpa
         uses: actions/checkout@v4
 
       - name: Setup Android NDK
@@ -158,7 +158,7 @@ jobs:
           done
 
           {
-            echo "P4G Shader ARM64 Build"
+            echo "Danganronpa Shader ARM64 Build"
             echo "Vita3K commit:"
             cat vita3k-commit.txt
             echo
@@ -386,7 +386,7 @@ jobs:
           echo "SDL3 library: $SDL_LIB"
 
 
-      - name: Build P4G shader C interface
+      - name: Build Danganronpa shader C interface
         shell: bash
         run: |
           set -euo pipefail
@@ -519,7 +519,7 @@ jobs:
               exit 1
             }
 
-          echo "P4G C interface v2 compiled."
+          echo "Danganronpa C interface v2 compiled."
 
 
       - name: Link Vita3K shader library
@@ -621,7 +621,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-shader-arm64-link-diagnostics
+          name: danganronpa-shader-arm64-link-diagnostics
           path: |
             build-shader/summary.txt
             build-shader/results.tsv

@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 public final class LauncherSettingsTest {
     public static void main(String[] args) throws Exception {

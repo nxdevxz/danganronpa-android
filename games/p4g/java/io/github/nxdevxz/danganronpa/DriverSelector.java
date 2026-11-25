@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.content.res.ColorStateList;
 import android.view.Gravity;
@@ -13,7 +13,7 @@ import java.util.List;
 /** Persistent driver selection. File operations run in the launcher, outside the game process. */
 final class DriverSelector {
     private final Launcher activity;
-    private P4gDialog dialog;
+    private LauncherDialog dialog;
     private boolean busy;
 
     private interface Operation { void run() throws IOException; }
@@ -33,7 +33,7 @@ final class DriverSelector {
     private void reload(Operation operation) {
         busy = true;
         dismiss();
-        P4gDialog progress = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
+        LauncherDialog progress = new LauncherDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
                 .setMessage(t("Atualizando lista de drivers…", "Updating driver list...")).setCancelable(false).create();
         dialog = progress;
         progress.show();
@@ -55,25 +55,25 @@ final class DriverSelector {
                 if (activity.isFinishing() || activity.isDestroyed()) return;
                 progress.dismiss();
                 if (failure == null) showList(saved, active);
-                else dialog = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
+                else dialog = new LauncherDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver"))
                         .setMessage(failure).setPositiveButton(t("Voltar", "Back"), (d, w) -> reload(null))
                         .setNegativeButton(t("Fechar", "Close"), null).show();
             });
-        }, "P4G-driver-list").start();
+        }, "Danganronpa-driver-list").start();
     }
 
     private void showList(List<CustomDrivers.Driver> drivers, String active) {
         LinearLayout content = new LinearLayout(activity);
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setBackgroundColor(P4gTheme.BACKGROUND);
-        int padding = P4gTheme.dp(activity, 12);
+        content.setBackgroundColor(LauncherTheme.BACKGROUND);
+        int padding = LauncherTheme.dp(activity, 12);
         content.setPadding(padding, padding, padding, padding);
         TextView hint = new TextView(activity);
         String last = CustomDrivers.lastRun(activity);
         hint.setText(t("A seleção será aplicada ao abrir o jogo novamente.",
                 "Selection applies the next time you open the game.")
                 + (last.isEmpty() ? "" : t("\nÚltima inicialização: ", "\nLast initialization: ") + last));
-        hint.setTextColor(P4gTheme.MUTED);
+        hint.setTextColor(LauncherTheme.MUTED);
         hint.setPadding(0, 0, 0, padding);
         content.addView(hint);
         LinearLayout rows = new LinearLayout(activity);
@@ -83,9 +83,9 @@ final class DriverSelector {
         ScrollView scroll = new ScrollView(activity);
         scroll.addView(rows);
         int screenHeight = activity.getResources().getDisplayMetrics().heightPixels;
-        int height = Math.max(P4gTheme.dp(activity, 100), screenHeight - P4gTheme.dp(activity, 210));
-        content.addView(scroll, new LinearLayout.LayoutParams(-1, Math.min(height, P4gTheme.dp(activity, 300))));
-        dialog = new P4gDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver")).setView(content)
+        int height = Math.max(LauncherTheme.dp(activity, 100), screenHeight - LauncherTheme.dp(activity, 210));
+        content.addView(scroll, new LinearLayout.LayoutParams(-1, Math.min(height, LauncherTheme.dp(activity, 300))));
+        dialog = new LauncherDialog.Builder(activity).setTitle(t("Driver gráfico", "GPU driver")).setView(content)
                 .setPositiveButton(t("Importar", "Import"), (d, w) -> activity.pick(Launcher.PICK_DRIVER, "*/*", false))
                 .setNegativeButton(t("Fechar", "Close"), null).show();
     }
@@ -97,10 +97,10 @@ final class DriverSelector {
         choice.setText(driver == null ? t("Driver do sistema", "System driver")
                 : driver.name + (driver.version.isEmpty() ? "" : "\n" + driver.version));
         choice.setTextSize(16);
-        choice.setTextColor(P4gTheme.TEXT);
-        choice.setButtonTintList(ColorStateList.valueOf(P4gTheme.YELLOW));
+        choice.setTextColor(LauncherTheme.TEXT);
+        choice.setButtonTintList(ColorStateList.valueOf(LauncherTheme.ACCENT));
         choice.setChecked(driver == null ? active.isEmpty() : active.equals(driver.id));
-        choice.setMinHeight(P4gTheme.dp(activity, 56));
+        choice.setMinHeight(LauncherTheme.dp(activity, 56));
         choice.setOnClickListener(v -> reload(() -> {
             if (driver == null) CustomDrivers.useSystem(activity);
             else CustomDrivers.select(activity, driver);
@@ -108,7 +108,7 @@ final class DriverSelector {
         row.addView(choice, new LinearLayout.LayoutParams(0, -2, 1));
         if (driver != null) {
             Button remove = new Button(activity);
-            P4gTheme.button(remove, false);
+            LauncherTheme.button(remove, false);
             remove.setText(t("Excluir", "Delete"));
             remove.setContentDescription(t("Excluir ", "Delete ") + driver.name);
             remove.setOnClickListener(v -> reload(() -> CustomDrivers.delete(activity, driver)));

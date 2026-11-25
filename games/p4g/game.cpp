@@ -7,9 +7,9 @@ namespace nx {
 
 const game::Info game::kInfo = {
     "p4g",
-    "Persona 4 Golden",
+    "Danganronpa THH",
     0x010062B01525C000ull,
-    "io.github.p4grecomp",
+    "io.github.nxdevxz.danganronpa",
     "private/p4g",
     0,
     "C433D980688380A6"

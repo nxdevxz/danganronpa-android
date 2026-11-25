@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.content.ContentResolver;
 import android.database.Cursor;
@@ -27,7 +27,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
 
-/** Imports the actual P4G files into the runtime's user/save directory. */
+/** Imports the actual Danganronpa files into the runtime's user/save directory. */
 final class SaveFiles {
     static final long MAX_BYTES = 256L << 20;  // a save is a few MB at most: anything bigger is not one
 
@@ -161,7 +161,7 @@ final class SaveFiles {
         }
         // The new directory is already live. Cleanup can be retried on launch.
         try { removeTree(previous); }
-        catch (IOException e) { android.util.Log.w("P4G-Saves", "Save cleanup pending", e); }
+        catch (IOException e) { android.util.Log.w("Danganronpa-Saves", "Save cleanup pending", e); }
         return result;
     }
     static Result importZip(ContentResolver cr, Uri uri) throws IOException {
@@ -221,7 +221,7 @@ final class SaveFiles {
         }
     }
 
-    /** Null when the selected tree holds no P4G save files. */
+    /** Null when the selected tree holds no Danganronpa save files. */
     static Result importTree(ContentResolver cr, Uri tree) throws IOException {
         String root = DocumentsContract.getTreeDocumentId(tree);
         String rootName = "";
@@ -271,7 +271,7 @@ final class SaveFiles {
         if (!hasFiles(saveDir())) return null;
         File dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS);
         if (!dir.isDirectory() && !dir.mkdirs()) throw new IOException("cannot make " + dir);
-        File out = new File(dir, "P4G-saves-" + stamp() + ".zip");
+        File out = new File(dir, "Danganronpa-saves-" + stamp() + ".zip");
         try (ZipOutputStream z = new ZipOutputStream(new FileOutputStream(out))) {
             zipTree(z, saveDir(), "save/");
         }

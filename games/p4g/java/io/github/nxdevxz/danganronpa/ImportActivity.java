@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.Activity;
 import android.net.Uri;
@@ -35,21 +35,21 @@ public class ImportActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         Lang.load(this);
-        P4gTheme.apply(this);
+        LauncherTheme.apply(this);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN | WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(P4gTheme.BACKGROUND);
+        root.setBackgroundColor(LauncherTheme.BACKGROUND);
         root.setPadding(dp(32), dp(32), dp(32), dp(32));
         TextView title = new TextView(this);
-        title.setText(t("Preparando P4G", "Preparing P4G"));
-        title.setTextColor(P4gTheme.YELLOW);
+        title.setText(t("Preparando Danganronpa", "Preparing Danganronpa"));
+        title.setTextColor(LauncherTheme.ACCENT);
         title.setTextSize(26);
         title.setTypeface(Typeface.DEFAULT_BOLD);
         root.addView(title);
         bar = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
         bar.setMax(1000);
-        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(P4gTheme.YELLOW));
+        bar.setProgressTintList(android.content.res.ColorStateList.valueOf(LauncherTheme.ACCENT));
         root.addView(bar, new LinearLayout.LayoutParams(-1, dp(24)));
         status = new TextView(this);
         status.setTextColor(android.graphics.Color.WHITE);
@@ -57,6 +57,7 @@ public class ImportActivity extends Activity {
         status.setPadding(0, dp(16), 0, 0);
         root.addView(status);
         Button cancel = new Button(this);
+        LauncherTheme.button(cancel, false);
         cancel.setText(t("Cancelar preparação", "Cancel preparation"));
         cancel.setOnClickListener(v -> onBackPressed());
         root.addView(cancel);
@@ -66,7 +67,7 @@ public class ImportActivity extends Activity {
 
     @Override public void onBackPressed() {
         if (!running) { setResult(RESULT_CANCELED); finish(); }
-        else new P4gDialog.Builder(this).setTitle(t("Cancelar preparação?", "Cancel preparation?"))
+        else new LauncherDialog.Builder(this).setTitle(t("Cancelar preparação?", "Cancel preparation?"))
             .setMessage(t("A instalação temporária será descartada. A instalação anterior continuará disponível.",
                     "The temporary installation will be discarded. Any previous installation stays available."))
             .setPositiveButton(t("Cancelar preparação", "Cancel preparation"), (d, w) -> {
@@ -81,7 +82,7 @@ public class ImportActivity extends Activity {
     }
     void fail(String message) {
         status.setText(message);
-        new P4gDialog.Builder(this).setTitle(t("Falha na preparação", "Preparation failed")).setMessage(message)
+        new LauncherDialog.Builder(this).setTitle(t("Falha na preparação", "Preparation failed")).setMessage(message)
             .setPositiveButton("OK", (d, w) -> { setResult(RESULT_CANCELED); finish(); })
             .setOnCancelListener(d -> { setResult(RESULT_CANCELED); finish(); }).show();
     }

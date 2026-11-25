@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.ActivityManager;
 import android.app.ApplicationExitInfo;
@@ -44,7 +44,7 @@ final class DiagnosticLogs {
     }
 
     static Exported export(Context context) throws IOException {
-        String name = "P4G-logs-" + new SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US)
+        String name = "Danganronpa-logs-" + new SimpleDateFormat("yyyyMMdd-HHmmss-SSS", Locale.US)
                 .format(new Date()) + ".txt";
         ContentResolver resolver = context.getContentResolver();
         ContentValues values = new ContentValues();
@@ -59,7 +59,7 @@ final class DiagnosticLogs {
             OutputStream stream = resolver.openOutputStream(uri);
             if (stream == null) throw new IOException("Could not open the log file.");
             try (BufferedWriter out = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8))) {
-                out.write("Persona 4 Golden diagnostics\n");
+                out.write("Danganronpa THH diagnostics\n");
                 out.write("Captured: " + new Date() + "\n");
                 out.write("Device: " + Build.MANUFACTURER + " " + Build.MODEL
                         + " | Android " + Build.VERSION.RELEASE + " (API " + Build.VERSION.SDK_INT + ")\n");
@@ -90,7 +90,7 @@ final class DiagnosticLogs {
             try {
                 logcat = new ProcessBuilder("/system/bin/logcat", "-b", "main", "-b", "crash",
                         "-v", "threadtime", "-t", Integer.toString(MAX_LINES),
-                        "--uid=" + Process.myUid(), "p4g:V", "P4G-Launch:V", "P4G-Saves:V",
+                        "--uid=" + Process.myUid(), "p4g:V", "Danganronpa-Launch:V", "Danganronpa-Saves:V",
                         "AndroidRuntime:E", "libc:F", "*:S")
                         .redirectErrorStream(true).redirectOutput(snapshot).start();
             } catch (IOException e) {

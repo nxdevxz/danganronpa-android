@@ -1,5 +1,5 @@
 
-name: P4G Beta
+name: Danganronpa Android
 
 on:
   workflow_dispatch:
@@ -34,7 +34,7 @@ jobs:
           c++ -std=c++17 -Wall -Wextra -Werror -I games/p4g/import tests/p4g_maxwell_test.cpp -o "$RUNNER_TEMP/p4g-maxwell-test"
           "$RUNNER_TEMP/p4g-maxwell-test"
 
-      - name: Verify P4G files
+      - name: Verify Danganronpa files
         shell: bash
         run: |
           set -euo pipefail
@@ -44,7 +44,7 @@ jobs:
           test -f games/p4g/import/p4g_import_jni.cpp
           test -f games/p4g/import/p4g_shaders.cpp
 
-          echo "P4G source files found."
+          echo "Danganronpa source files found."
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
@@ -132,7 +132,7 @@ jobs:
           test -s build-apk/shader-libs/Ryubing-MIT.txt
           echo "Maxwell translator ready ($(du -h build-apk/shader-libs/libspirvharness.so | cut -f1))."
 
-      - name: Configure P4G ARM64
+      - name: Configure Danganronpa ARM64
         shell: bash
         run: |
           set -euo pipefail
@@ -152,12 +152,12 @@ jobs:
             -DNX_NCE=ON \
             -DNX_ANDROID_THIN_LTO=ON
 
-          echo "P4G ARM64 configuration ready."
+          echo "Danganronpa ARM64 configuration ready."
 
           grep -q -- "-flto=thin" build-p4g/build.ninja
-          echo "P4G ThinLTO flags verified."
+          echo "Danganronpa ThinLTO flags verified."
 
-      - name: Build P4G native library
+      - name: Build Danganronpa native library
         shell: bash
         run: |
           set -euo pipefail
@@ -168,9 +168,9 @@ jobs:
 
           test -s build-p4g/libp4g.so
 
-          echo "P4G native library built."
+          echo "Danganronpa native library built."
 
-      - name: Build P4G importer
+      - name: Build Danganronpa importer
         shell: bash
         run: |
           set -euo pipefail
@@ -181,12 +181,12 @@ jobs:
 
           test -s build-p4g/libp4gimport.so
 
-          echo "P4G importer built."
+          echo "Danganronpa importer built."
 
-      - name: Upload P4G native libraries
+      - name: Upload Danganronpa native libraries
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-android-arm64-libs
+          name: danganronpa-android-arm64-libs
           path: |
             build-p4g/libp4g.so
             build-p4g/libp4gimport.so
@@ -245,7 +245,7 @@ jobs:
             exit 1
           fi
 
-      - name: Compile P4G Java classes
+      - name: Compile Danganronpa Java classes
         shell: bash
         run: |
           set -euo pipefail
@@ -265,16 +265,16 @@ jobs:
             -d build-java/classes \
             @build-java/sources.txt
 
-          echo "P4G Java compilation successful."
+          echo "Danganronpa Java compilation successful."
 
-      - name: Test P4G preparation and save imports
+      - name: Test Danganronpa preparation and save imports
         # Host tests run after the real Android Java compilation above.
         # Keep UI/native lifecycle validation on the device.
         if: success()
         shell: bash
         run: python3 tests/test_app_flow.py
 
-      - name: Generate P4G DEX bytecode
+      - name: Generate Danganronpa DEX bytecode
         shell: bash
         run: |
           set -euo pipefail
@@ -298,16 +298,16 @@ jobs:
 
           test -s build-java/dex/classes.dex
 
-          echo "P4G DEX generated."
+          echo "Danganronpa DEX generated."
 
-      - name: Upload P4G DEX
+      - name: Upload Danganronpa DEX
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-android-dex
+          name: danganronpa-android-dex
           path: build-java/dex/classes.dex
           if-no-files-found: error
 
-      - name: Build P4G APK resources
+      - name: Build Danganronpa APK resources
         shell: bash
         run: |
           set -euo pipefail
@@ -329,9 +329,9 @@ jobs:
 
           test -s build-apk/base.apk
 
-          echo "P4G APK resources built."
+          echo "Danganronpa APK resources built."
 
-      - name: Package P4G APK
+      - name: Package Danganronpa APK
         shell: bash
         run: |
           set -euo pipefail
@@ -408,10 +408,10 @@ jobs:
                       f"({source_path.stat().st_size} bytes)"
                   )
 
-          print("P4G APK packaged successfully.")
+          print("Danganronpa APK packaged successfully.")
           PY
 
-      - name: Verify P4G APK contents
+      - name: Verify Danganronpa APK contents
         shell: bash
         run: |
           set -euo pipefail
@@ -468,10 +468,10 @@ jobs:
                       "APK ZIP integrity check failed"
                   )
 
-          print("All P4G libraries verified.")
+          print("All Danganronpa libraries verified.")
           PY
 
-      - name: Sign P4G APK
+      - name: Sign Danganronpa APK
         shell: bash
         env:
           P4G_SIGNING_KEY_B64: ${{ secrets.P4G_SIGNING_KEY_B64 }}
@@ -504,14 +504,14 @@ jobs:
             --ks-type PKCS12 \
             --ks-pass env:P4G_SIGNING_PASSWORD \
             --key-pass env:P4G_SIGNING_PASSWORD \
-            --out "build-apk/P4G.apk" \
+            --out "build-apk/Danganronpa.apk" \
             build-apk/aligned.apk
 
           "$BUILD_TOOLS/apksigner" verify --verbose --print-certs \
-            "build-apk/P4G.apk"
-          test -s "build-apk/P4G.apk"
+            "build-apk/Danganronpa.apk"
+          test -s "build-apk/Danganronpa.apk"
 
-          APK_SIZE=$(stat -c '%s' "build-apk/P4G.apk")
+          APK_SIZE=$(stat -c '%s' "build-apk/Danganronpa.apk")
           MAX_APK_SIZE=$((16 * 1024 * 1024))
           echo "Release APK size: $APK_SIZE bytes (limit: $MAX_APK_SIZE)"
           if [ "$APK_SIZE" -gt "$MAX_APK_SIZE" ]; then
@@ -520,18 +520,18 @@ jobs:
           fi
 
 
-      - name: Upload P4G APK
+      - name: Upload Danganronpa APK
         uses: actions/upload-artifact@v4
         with:
-          name: P4G-0.5.2-Beta
-          path: build-apk/P4G.apk
+          name: Danganronpa-0.0.1
+          path: build-apk/Danganronpa.apk
           if-no-files-found: error
 
       - name: Upload shader packaging diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-apk-shader-diagnostics
+          name: danganronpa-apk-shader-diagnostics
           path: |
             build-apk/shader-libs/shader-elf.txt
             build-apk/shader-libs/shader-symbols.txt

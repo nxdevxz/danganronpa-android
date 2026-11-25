@@ -1,5 +1,5 @@
 
-name: Test P4G GXP Extractor
+name: Test Danganronpa GXP Extractor
 
 on:
   workflow_dispatch:
@@ -105,7 +105,7 @@ jobs:
 
           echo "All corrupted GXP tests passed!"
 
-      - name: Inspect real P4G GXP sample
+      - name: Inspect real Danganronpa GXP sample
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -159,6 +159,6 @@ jobs:
       - name: Upload real GXP report
         uses: actions/upload-artifact@v4
         with:
-          name: p4g-real-gxp-report
+          name: danganronpa-real-gxp-report
           path: real-gxp-report.txt
           if-no-files-found: error

@@ -1,10 +1,10 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import java.io.IOException;
 import java.util.List;
 import java.util.Locale;
 
-/** P4G stores dataXXXX.bin + .binslot directly inside user/save. */
+/** Danganronpa stores dataXXXX.bin + .binslot directly inside user/save. */
 final class SavePaths {
     static boolean safe(String path) {
         if (path.isEmpty() || path.startsWith("/") || path.contains("\\") || path.contains(":")) return false;

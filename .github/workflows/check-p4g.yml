@@ -1,4 +1,4 @@
-name: P4G source checks
+name: Danganronpa source checks
 
 on:
   push:
@@ -33,7 +33,7 @@ jobs:
           javac -encoding UTF-8 --release 8 -cp "$ANDROID_HOME/platforms/android-35/android.jar" \
             -d "$RUNNER_TEMP/p4g-classes" @"$RUNNER_TEMP/p4g-sources.txt"
           java -cp "$RUNNER_TEMP/p4g-classes:$ANDROID_HOME/platforms/android-35/android.jar" \
-            io.github.p4grecomp.LauncherSettingsTest
+            io.github.nxdevxz.danganronpa.LauncherSettingsTest
       - name: Test saves, mods and installation
         run: python3 tests/test_app_flow.py
       - name: Test native helpers

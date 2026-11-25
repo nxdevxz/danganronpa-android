@@ -61,7 +61,7 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         std::string error;
         auto game = nxi::GameImage::open(inputs, 0, error);
         if (!game) return fail(error.empty() ? "Could not open the game" : error);
-        if ((game->title_id() & ~0xfffull) != 0x010062B01525C000ull) return fail("Title ID does not match P4G");
+        if ((game->title_id() & ~0xfffull) != 0x010062B01525C000ull) return fail("Danganronpa preparation is not supported by the inherited importer yet");
         if (!game->exefs().count("main")) return fail("The game has no main executable");
         if (!nx::nvn::local::available(error)) return fail(error);
 
@@ -161,27 +161,27 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
 }
 }
 extern "C" {
-JNIEXPORT void JNICALL Java_io_github_p4grecomp_Importer_reset(JNIEnv*, jclass) {
+JNIEXPORT void JNICALL Java_io_github_nxdevxz_danganronpa_Importer_reset(JNIEnv*, jclass) {
     cancelled = false; bytes_done = 0; bytes_total = 0;
     phase = 0; done = 0; total = 0;
 }
-JNIEXPORT void JNICALL Java_io_github_p4grecomp_Importer_cancel(JNIEnv*, jclass) { cancelled = true; }
-JNIEXPORT jlongArray JNICALL Java_io_github_p4grecomp_Importer_bytes(JNIEnv* env, jclass) {
+JNIEXPORT void JNICALL Java_io_github_nxdevxz_danganronpa_Importer_cancel(JNIEnv*, jclass) { cancelled = true; }
+JNIEXPORT jlongArray JNICALL Java_io_github_nxdevxz_danganronpa_Importer_bytes(JNIEnv* env, jclass) {
     jlong values[] = {jlong(bytes_done.load()), jlong(bytes_total.load())};
     auto out = env->NewLongArray(2);
     if (out) env->SetLongArrayRegion(out, 0, 2, values);
     return out;
 }
-JNIEXPORT jint JNICALL Java_io_github_p4grecomp_Importer_run(JNIEnv* env, jclass, jint fd, jstring name,
+JNIEXPORT jint JNICALL Java_io_github_nxdevxz_danganronpa_Importer_run(JNIEnv* env, jclass, jint fd, jstring name,
         jint update_fd, jstring update_name, jstring keys, jstring title_keys, jstring data_dir, jstring, jint, jboolean direct) {
     return run(fd, jstr(env, name), update_fd, jstr(env, update_name), jstr(env, keys),
             jstr(env, title_keys), jstr(env, data_dir), direct);
 }
-JNIEXPORT jintArray JNICALL Java_io_github_p4grecomp_Importer_progress(JNIEnv* env, jclass) {
+JNIEXPORT jintArray JNICALL Java_io_github_nxdevxz_danganronpa_Importer_progress(JNIEnv* env, jclass) {
     jint values[] = {phase.load(), done.load(), total.load()};
     auto out = env->NewIntArray(3); if (out) env->SetIntArrayRegion(out, 0, 3, values); return out;
 }
-JNIEXPORT jstring JNICALL Java_io_github_p4grecomp_Importer_error(JNIEnv* env, jclass) {
+JNIEXPORT jstring JNICALL Java_io_github_nxdevxz_danganronpa_Importer_error(JNIEnv* env, jclass) {
     std::lock_guard guard(message_lock); return env->NewStringUTF(message.c_str());
 }
 }

@@ -7,7 +7,7 @@ import re
 
 root = Path(__file__).resolve().parents[1]
 manifest = root / 'games/p4g/AndroidManifest.xml'
-if not manifest.is_file() or 'io.github.p4grecomp' not in manifest.read_text(encoding='utf-8'):
+if not manifest.is_file() or 'io.github.nxdevxz.danganronpa' not in manifest.read_text(encoding='utf-8'):
     raise SystemExit('Not a P4G checkout; nothing removed.')
 target = root / 'games/p4g/assets/spirv'
 if not target.exists():

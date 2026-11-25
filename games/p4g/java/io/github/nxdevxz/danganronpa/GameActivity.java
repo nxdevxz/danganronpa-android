@@ -1,4 +1,4 @@
-package io.github.p4grecomp;
+package io.github.nxdevxz.danganronpa;
 
 import android.app.NativeActivity;
 import android.content.Intent;
@@ -16,7 +16,7 @@ import java.util.Map;
 
 /** The runtime lives in :game; its native exit must not kill the launcher. */
 public class GameActivity extends NativeActivity {
-    private P4gDialog exitDialog;
+    private LauncherDialog exitDialog;
     private Object backCallback;
     private PerformanceOverlay performanceOverlay;
     static native long nativeFrames();
@@ -82,10 +82,10 @@ public class GameActivity extends NativeActivity {
             Map<String, String> config = Launcher.readConfig(new File(Launcher.dataDir(), "config.txt"));
             LinearLayout quick = new LinearLayout(this);
             quick.setOrientation(LinearLayout.VERTICAL);
-            P4gTheme.section(quick, Lang.t("Configurações rápidas", "Quick settings"));
+            LauncherTheme.section(quick, Lang.t("Configurações rápidas", "Quick settings"));
             addQuickSetting(quick, config, Lang.t("Controles na tela", "On-screen controls"), "NX_TOUCH_SHOW",
                     new String[] {"0", "1"}, "1");
-            exitDialog = new P4gDialog.Builder(this)
+            exitDialog = new LauncherDialog.Builder(this)
                 .setTitle(Lang.t("Menu do jogo", "Game menu"))
                 .setMessage(Lang.t("As mudanças rápidas serão aplicadas na próxima vez que o jogo for aberto.",
                         "Quick changes apply the next time the game opens."))
@@ -97,7 +97,7 @@ public class GameActivity extends NativeActivity {
     }
 
     private void confirmExitGame() {
-        exitDialog = new P4gDialog.Builder(this)
+        exitDialog = new LauncherDialog.Builder(this)
                 .setTitle(Lang.t("Sair do jogo?", "Exit the game?"))
                 .setMessage(Lang.t("Quer mesmo sair e voltar ao launcher? O progresso não salvo pode ser perdido.",
                         "Exit and return to the launcher? Unsaved progress may be lost."))
@@ -114,14 +114,14 @@ public class GameActivity extends NativeActivity {
             String[] values, String fallback) {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
-        row.setPadding(0, P4gTheme.dp(this, 2), 0, P4gTheme.dp(this, 2));
+        row.setPadding(0, LauncherTheme.dp(this, 2), 0, LauncherTheme.dp(this, 2));
         TextView name = new TextView(this);
         name.setText(label);
-        name.setTextColor(P4gTheme.TEXT);
+        name.setTextColor(LauncherTheme.TEXT);
         name.setTextSize(15);
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         Button value = new Button(this);
-        P4gTheme.button(value, false);
+        LauncherTheme.button(value, false);
         String current = config.get(key);
         int selected = 0;
         for (int i = 0; i < values.length; i++) if (values[i].equals(current == null ? fallback : current)) selected = i;
@@ -134,7 +134,7 @@ public class GameActivity extends NativeActivity {
             value.setText(touchLabel(selectedValue));
             Launcher.writeConfig(new File(Launcher.dataDir(), "config.txt"), config);
         });
-        row.addView(value, new LinearLayout.LayoutParams(P4gTheme.dp(this, 126), -2));
+        row.addView(value, new LinearLayout.LayoutParams(LauncherTheme.dp(this, 126), -2));
         root.addView(row);
     }
 
