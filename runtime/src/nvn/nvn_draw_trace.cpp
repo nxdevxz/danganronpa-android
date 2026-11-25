@@ -562,10 +562,11 @@ void trace_draw(const Targets& t, uint32_t mode, bool indexed, const Cmd& c, con
             log("  fs constants %zu bytes: %g %g %g %g", k.size(), k.size() >= 4 ? f[0] : -1, k.size() >= 8 ? f[1] : -1,
                 k.size() >= 12 ? f[2] : -1, k.size() >= 16 ? f[3] : -1);
         }
+        const GpuImage* color = t.color_count && t.colors[0] ? image_of(t.colors[0]) : nullptr;
         const BlendTarget& b0 = g_state.blend[0];
         log("  blend %u (%u %u %u %u eq %u %u) mask %x logic %x alpha %x fmt %d", g_state.color.blend_enable[0], b0.src_rgb,
             b0.dst_rgb, b0.src_a, b0.dst_a, b0.eq_rgb, b0.eq_a, g_state.mask.mask[0], g_state.color.logic_op,
-            g_state.color.alpha_test, t.colors[0] ? int(image_of(t.colors[0])->format) : -1);
+            g_state.color.alpha_test, color ? int(color->format) : -1);
         log("  depth func %u write %u", g_state.depth.depth_func, g_state.depth.depth_write);
         log("  viewport %d %d %d %d (%d) scissor %d %d %d %d (%d) cull %u front %u depth %g..%g test %u", g_state.viewport[0],
             g_state.viewport[1], g_state.viewport[2], g_state.viewport[3], g_state.has_viewport, g_state.scissor[0],
