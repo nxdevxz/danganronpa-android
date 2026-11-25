@@ -7,7 +7,7 @@ import java.util.*;
 /** One complete, replaceable installation. Saves, mods and settings stay outside this directory. */
 final class InstalledGameFiles {
     static final String FORMAT = "format\tdanganronpa-installed-v1";
-    static final String TITLE = "title\t010062b01525c000";
+    static final String TITLE = "title\t0100812014172000";
     private static final Object LOCK = new Object();
     private static boolean preparing;
 
@@ -134,8 +134,8 @@ final class InstalledGameFiles {
 
     static String revision(File current) throws IOException {
         String id = buildId(new File(current, "exefs/main"));
-        if (id.equals("C433D980688380A642C086072F620928")) return "1.0.0";
-        if (id.equals("66B2B6D53549A6364A43F69E282E3882")) return "1.0.1 / 1.0.2";
+        if (id.equals("8144C2AF29A2797F33A722B1E55E6196")) return "Base (v0)";
+        if (id.equals("7D420713882DDB2AE2BC95C51822BC98")) return "Update (v1)";
         throw new IOException("Unsupported Danganronpa revision (Build ID " + id + ")");
     }
 

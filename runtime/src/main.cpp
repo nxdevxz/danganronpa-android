@@ -219,8 +219,7 @@ void boot() {
     if (nso.size() < 2) fatal("failed to load base modules (main and sdk required)");
 
     
-    // Refuse unknown executable revisions before applying any game-specific assumptions. The inherited Persona profile's
-    // 1.0.1 and 1.0.2 updates share the registered main Build ID prefix.
+    // Refuse unknown executable revisions before applying any game-specific assumptions.
     {
         std::string have;
         for (uint8_t b : nso[0]->build_id) {
@@ -230,9 +229,9 @@ void boot() {
         }
         const bool configured = game::kInfo.main_build_id &&
                 have.rfind(game::kInfo.main_build_id, 0) == 0;
-        const bool danganronpa_update = std::strcmp(game::kInfo.id, "danganronpa") == 0 &&
-                have.rfind("66B2B6D53549A6364A43F69E282E3882", 0) == 0;
-        if (!configured && !danganronpa_update)
+        const bool update = game::kInfo.update_build_id &&
+                have.rfind(game::kInfo.update_build_id, 0) == 0;
+        if (!configured && !update)
             fatal("%s: unsupported main Build ID %s", game::kInfo.title, have.c_str());
         log("%s: main build %s recognized", game::kInfo.id, have.c_str());
     }

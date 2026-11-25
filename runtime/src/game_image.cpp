@@ -79,7 +79,7 @@ void open_image() {
         if (f >= 0) keys.push_back(f), in.push_back({"title.keys", f});
     }
     std::string err;
-    g_image = nxi::GameImage::open(in, 0, err);
+    g_image = nxi::GameImage::open(in, game::kInfo.program_id, err);
     for (int f : keys) close_fd(f);
     if (!g_image) fatal("game: %s could not be read: %s", shown.c_str(), err.c_str());
     log("game: %s read in place (title %016llx): %zu RomFS files, ExeFS %zu files", shown.c_str(),

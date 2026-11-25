@@ -11,6 +11,7 @@
 #include <stdexcept>
 #include <string>
 #include "nxgame.h"
+#include "../profile.h"
 #include "danganronpa_maxwell.h"
 #include "nvn_local_shader.h"
 #include "nvn_shaders.h"
@@ -59,9 +60,8 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         OwnedFd t{title_keys.empty() ? -1 : open(title_keys.c_str(), O_RDONLY | O_CLOEXEC)};
         if (t.value >= 0) inputs.push_back({"title.keys", t.value});
         std::string error;
-        auto game = nxi::GameImage::open(inputs, 0, error);
+        auto game = nxi::GameImage::open(inputs, danganronpa::profile::program_id, error);
         if (!game) return fail(error.empty() ? "Could not open the game" : error);
-        if ((game->title_id() & ~0xfffull) != 0x010062B01525C000ull) return fail("Danganronpa preparation is not supported by the inherited importer yet");
         if (!game->exefs().count("main")) return fail("The game has no main executable");
         if (!nx::nvn::local::available(error)) return fail(error);
 
@@ -71,7 +71,7 @@ int run(int fd, const std::string& name, int update_fd, const std::string& updat
         // streaming importer; no game image or keys are required by the installed runtime.
         nxi::Options options;
         options.out_dir = root.string();
-        options.title_id = 0x010062B01525C000ull;
+        options.title_id = danganronpa::profile::program_id;
         options.keep_exefs = true;
         options.cancel = &cancelled;
         options.on_progress = [](const nxi::Progress& p) {

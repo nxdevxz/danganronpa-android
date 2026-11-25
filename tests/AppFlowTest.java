@@ -28,7 +28,7 @@ public class AppFlowTest {
     }
     static void installationFixture(File stage, String content) throws IOException {
         byte[] nso = new byte[0x100]; nso[0] = 'N'; nso[1] = 'S'; nso[2] = 'O'; nso[3] = '0';
-        byte[] build = hex("C433D980688380A642C086072F620928");
+        byte[] build = hex("8144C2AF29A2797F33A722B1E55E6196");
         System.arraycopy(build, 0, nso, 0x40, build.length);
         bytes(new File(stage, "exefs/main"), nso); bytes(new File(stage, "exefs/sdk"), nso);
         text(new File(stage, "extract/romfs/CPK/data.cpk"), content);
@@ -54,6 +54,17 @@ public class AppFlowTest {
         try { InstalledGameFiles.begin(root); throw new AssertionError("Concurrent preparation accepted"); }
         catch (IOException expected) { }
         installationFixture(stage, "installed data");
+        File main = new File(stage, "exefs/main");
+        check("Base (v0)".equals(InstalledGameFiles.revision(stage)));
+        try (RandomAccessFile executable = new RandomAccessFile(main, "rw")) {
+            executable.seek(0x40);
+            executable.write(hex("C433D980688380A642C086072F620928"));
+            try { InstalledGameFiles.revision(stage); throw new AssertionError("Persona build accepted"); }
+            catch (IOException expected) { }
+            executable.seek(0x40);
+            executable.write(hex("7D420713882DDB2AE2BC95C51822BC98"));
+        }
+        check("Update (v1)".equals(InstalledGameFiles.revision(stage)));
         InstalledGameFiles.finish(stage); check(!new File(stage, "analysis").exists());
         InstalledGameFiles.publish(root, stage);
         check(InstalledGameFiles.ready(root) && InstalledGameFiles.present(root));

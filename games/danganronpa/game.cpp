@@ -1,5 +1,6 @@
 
 #include <nx/game.h>
+#include "profile.h"
 #include <nx/runtime.h>
 #include <cstdlib>
 
@@ -8,11 +9,12 @@ namespace nx {
 const game::Info game::kInfo = {
     "danganronpa",
     "Danganronpa THH",
-    0x010062B01525C000ull,
+    danganronpa::profile::program_id,
     "io.github.nxdevxz.danganronpa",
     "private/danganronpa",
     0,
-    "C433D980688380A6"
+    danganronpa::profile::base_build,
+    danganronpa::profile::update_build
 };
 
 void game::after_init() {
