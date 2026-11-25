@@ -375,6 +375,7 @@ void SetRenderTargets(CPU& c) {
             if (!reported.exchange(true))
                 log("nvn: routing Unity screen target %llx to acquired texture %llx",
                     (unsigned long long)cmd.a[0], (unsigned long long)acquired);
+            screen_color_proxy.store(cmd.a[0]);
             cmd.a[0] = acquired;
         }
     }

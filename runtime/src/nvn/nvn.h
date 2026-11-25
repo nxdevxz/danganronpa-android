@@ -230,6 +230,14 @@ struct Texture : Object {
 };
 
 extern std::atomic<uint64_t> acquired_color_texture;
+extern std::atomic<uint64_t> screen_color_proxy;
+inline uint64_t screen_copy_texture(uint64_t guest) {
+    if (guest && guest == screen_color_proxy.load() && !get<Texture>(guest)) {
+        const uint64_t acquired = acquired_color_texture.load();
+        if (acquired) return acquired;
+    }
+    return guest;
+}
 
 struct Window : Object {
     std::vector<uint64_t> textures;  // guest NVNtexture*

@@ -38,6 +38,7 @@ extern std::atomic<uint64_t> g_tick_calls, g_yield_calls, g_sleep_calls;
 namespace nx::nvn {
 
 std::atomic<uint64_t> acquired_color_texture{0};
+std::atomic<uint64_t> screen_color_proxy{0};
 
 extern std::atomic<uint64_t> g_linear_uploads;  // nvn_upload.cpp
 

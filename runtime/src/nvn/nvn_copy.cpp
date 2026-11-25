@@ -38,7 +38,14 @@ void CopyTextureToTexture(CPU& c) {
     }
     info.flags = uint32_t(c.x[7]);
     Cmd cmd{Cmd::CopyTextureToTexture};
-    cmd.a[0] = c.x[1], cmd.a[1] = c.x[4];
+    cmd.a[0] = screen_copy_texture(c.x[1]);
+    cmd.a[1] = screen_copy_texture(c.x[4]);
+    if (perf_stats_on() && (cmd.a[0] != c.x[1] || cmd.a[1] != c.x[4])) {
+        static std::atomic<bool> reported{false};
+        if (!reported.exchange(true))
+            log("nvn: resolved screen texture copy %llx -> %llx", (unsigned long long)cmd.a[0],
+                (unsigned long long)cmd.a[1]);
+    }
     record(c.x[0], cmd, &info, sizeof info);
 }
 
