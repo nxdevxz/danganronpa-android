@@ -794,7 +794,10 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     PipelineKey key;
     std::memset(&key, 0, sizeof key);  // the key is compared byte for byte
     key.vs = vs, key.fs = fs;
-    key.topology = mode;
+    // One independent NVN quad has perimeter-ordered vertices. A four-vertex
+    // fan emits (0,1,2) and (0,2,3); a triangle list discards vertex 3.
+    const bool single_quad = mode == 7 && !indexed && c.i[1] == 4;
+    key.topology = single_quad ? 6 : mode;
     key.attrib_count = uint32_t(std::min<size_t>(g_state.attribs.size(), 16));
     std::copy_n(g_state.attribs.begin(), key.attrib_count, key.attribs);
     key.stream_count = uint32_t(std::min<size_t>(g_state.streams.size(), 16));
