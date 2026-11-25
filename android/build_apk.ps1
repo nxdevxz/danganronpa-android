@@ -1,11 +1,11 @@
 # Build a game's Android APK (NativeActivity, no Gradle): cmake (NDK) -> lib<game>.so -> aapt2 -> zipalign -> apksigner.
-# Usage, in a dev shell (. .\dev.ps1):  android\build_apk.ps1 [-Game <game>] [-Install]   (default p4g)
+# Usage, in a dev shell (. .\dev.ps1):  android\build_apk.ps1 [-Game <game>] [-Install]   (default danganronpa)
 #   -Nce          native execution (CMake NX_NCE): the APK holds no game code, it runs the exefs of the player's dump
 #                 (build in private\<game>\ba_nce, APK in private\<game>\apk_nce)
 #   -TestPackage  installs next to the normal build: package <package>.nce, label "<label> (NCE)"
 #   -Release      the public build (CMake NX_RELEASE: no nx.log file, no file-triggered diagnostics; logcat only);
 #                 without it the build directory keeps the setting it has
-param([string]$Game = "p4g", [switch]$Install, [switch]$Nce, [switch]$TestPackage, [switch]$Release)
+param([string]$Game = "danganronpa", [switch]$Install, [switch]$Nce, [switch]$TestPackage, [switch]$Release)
 $ErrorActionPreference = "Stop"
 $root = Split-Path $PSScriptRoot
 # The SDK: ANDROID_HOME, else C:\Android\sdk, else Android Studio's default (%LOCALAPPDATA%\Android\Sdk).
@@ -27,19 +27,19 @@ if (-not (Test-Path "$build\build.ninja")) {
         -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-29 -DANDROID_STL=c++_static "-DNX_GAME=$Game" "-DNX_NCE=$nceFlag"
 }
 if ($Release) { cmake -B $build -DNX_RELEASE=ON | Out-Null }
-# Libraries packed with libp4g.so: the importer and the source-built Maxwell shader translator.
+# Libraries packed with libdanganronpa.so: the importer and the source-built Maxwell shader translator.
 $extraLibs = @()
 $targets = @($Game)
-if ($Nce -and $Game -eq "p4g") {
+if ($Nce -and $Game -eq "danganronpa") {
     $harness = "$root\build-apk\shader-libs\libspirvharness.so"
     if (-not (Test-Path $harness)) {
-        throw "missing $harness. Build it in Linux/WSL with tools/maxwell/build_p4g_translator.sh or download the shader-libs artifact from the P4G Beta workflow."
+        throw "missing $harness. Build it in Linux/WSL with tools/maxwell/build_danganronpa_translator.sh or download the shader-libs artifact from the DANGANRONPA Beta workflow."
     }
     $importLib = "${Game}import"
     $targets += $importLib
     $extraLibs += @("$build\lib$importLib.so", $harness)
 }
-if ($Game -eq "p4g") {
+if ($Game -eq "danganronpa") {
     foreach ($hook in @("hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook")) {
         $extraLibs += "$build\adrenotools\src\hook\lib$hook.so"
     }
@@ -104,7 +104,7 @@ if (Test-Path $java) {
     if ($LASTEXITCODE) { throw "d8 failed" }
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($apk, "$out\dex\classes.dex", "classes.dex", "Optimal") | Out-Null
 }
-if ($Game -eq "p4g") {
+if ($Game -eq "danganronpa") {
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($apk, "$root\third_party\libadrenotools\LICENSE", "assets/licenses/libadrenotools.txt", "Optimal") | Out-Null
     [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($apk, "$root\third_party\libadrenotools\lib\linkernsbypass\LICENSE", "assets/licenses/linkernsbypass.txt", "Optimal") | Out-Null
 }

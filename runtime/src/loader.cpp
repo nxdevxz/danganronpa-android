@@ -54,8 +54,8 @@ thread_local const char* t_missing_name = nullptr;
 
 namespace {
 bool compact_trace(const char* text) {
-    return std::strncmp(text, "p4g: HLE enter ", 15) == 0 ||
-           std::strncmp(text, "p4g: HLE exit ", 14) == 0 ||
+    return std::strncmp(text, "danganronpa: HLE enter ", sizeof("danganronpa: HLE enter ") - 1) == 0 ||
+           std::strncmp(text, "danganronpa: HLE exit ", sizeof("danganronpa: HLE exit ") - 1) == 0 ||
            std::strncmp(text, "svc 0x", 6) == 0 ||
            std::strncmp(text, "nvn/vk: pipeline: ", 18) == 0;
 }
@@ -97,7 +97,7 @@ void log(const char* fmt, ...) {
 
         g_log_file = std::fopen(file.c_str(), "w");
         if (g_log_file && !verbose)
-            std::fprintf(g_log_file, "p4g: compact log effects-v2 (detailed IPC, file and analog traces are opt-in)\n");
+            std::fprintf(g_log_file, "danganronpa: compact log effects-v2 (detailed IPC, file and analog traces are opt-in)\n");
     }
 
     plat::log_line(buf);
@@ -329,7 +329,7 @@ void hle_invoke(CPU& c, size_t index) {
     const Thunk& th = g_thunks[index];
 
     log(
-        "p4g: HLE enter name=%s lr=%s x0=0x%llX x1=0x%llX",
+        "danganronpa: HLE enter name=%s lr=%s x0=0x%llX x1=0x%llX",
         th.name.c_str(),
         describe(c.x[30]).c_str(),
         (unsigned long long)c.x[0],
@@ -349,7 +349,7 @@ void hle_invoke(CPU& c, size_t index) {
     th.fn(c);
 
     log(
-        "p4g: HLE exit name=%s x0=0x%llX x1=0x%llX",
+        "danganronpa: HLE exit name=%s x0=0x%llX x1=0x%llX",
         th.name.c_str(),
         (unsigned long long)c.x[0],
         (unsigned long long)c.x[1]
@@ -671,11 +671,11 @@ void load_modules(
                     target = hle_address_or(s.name, trace_audio_out_state);
             }
 
-            // P4G diagnostic: record unresolved imports.
+            // DANGANRONPA diagnostic: record unresolved imports.
             // This does not change the existing linker behavior.
             if (!target) {
                 log(
-                    "p4g: unresolved import: module=%s "
+                    "danganronpa: unresolved import: module=%s "
                     "symbol=%s type=%u bind=%u "
                     "reloc_type=%u offset=0x%llx",
                     mi->name,

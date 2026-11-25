@@ -50,7 +50,7 @@ uint64_t g_vertex_full = 0, g_vertex_prefix = 0, g_vertex_trimmed = 0;
 bool vertex_upload_ranges() {
     static const bool on = [] {
         const char* e = std::getenv("NX_VERTEX_UPLOAD_RANGES");
-        const bool enabled = e ? e[0] == '1' : std::strcmp(game::kInfo.id, "p4g") == 0;
+        const bool enabled = e ? e[0] == '1' : std::strcmp(game::kInfo.id, "danganronpa") == 0;
         log("nvn: bounded vertex uploads %s (NX_VERTEX_UPLOAD_RANGES)", enabled ? "on" : "off");
         return enabled;
     }();

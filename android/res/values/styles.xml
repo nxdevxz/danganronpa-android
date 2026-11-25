@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="LauncherStyle" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#FF3694</item>
+        <item name="android:windowBackground">#0E0C10</item>
+        <item name="android:colorBackground">#0E0C10</item>
+    </style>
     <!-- Full screen, drawing under the camera cutout so the game gets the whole panel (2340x1080 on a Galaxy S23). -->
     <style name="Fullscreen" parent="android:Theme.Material.NoActionBar.Fullscreen">
         <item name="android:windowFullscreen">true</item>

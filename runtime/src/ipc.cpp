@@ -64,12 +64,12 @@ uint32_t Service::handle(IpcCtx& ctx) {
             std::memcpy(&result, ctx.in, sizeof(result));
 
             log(
-                "p4g: SetTerminateResult called, result=0x%08X",
+                "danganronpa: SetTerminateResult called, result=0x%08X",
                 result
             );
         } else {
             log(
-                "p4g: SetTerminateResult called, "
+                "danganronpa: SetTerminateResult called, "
                 "missing result payload (size=%zu)",
                 ctx.in_size
             );
@@ -284,7 +284,7 @@ uint32_t ipc_request(CPU& c, uint32_t handle, uint64_t buf, uint64_t) {
 
         const bool trace = trace_ipc();
         if (trace) log(
-            "p4g: IPC request service=%s cmd=%u",
+            "danganronpa: IPC request service=%s cmd=%u",
             target->name.c_str(),
             ctx.cmd
         );
@@ -292,7 +292,7 @@ uint32_t ipc_request(CPU& c, uint32_t handle, uint64_t buf, uint64_t) {
 
         // Failed results remain visible even when successful call-by-call tracing is off.
         if (trace || rc != 0) log(
-            "p4g: IPC response service=%s cmd=%u "
+            "danganronpa: IPC response service=%s cmd=%u "
             "result=0x%08X data_bytes=%zu objects=%zu "
             "copy_handles=%zu move_handles=%zu",
             target->name.c_str(),

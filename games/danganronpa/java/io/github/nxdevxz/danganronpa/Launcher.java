@@ -1,0 +1,1421 @@
+package io.github.nxdevxz.danganronpa;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.Context;
+import android.content.DialogInterface;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.database.Cursor;
+import android.graphics.Color;
+import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.Build;
+import android.os.Bundle;
+import android.os.Environment;
+import android.os.ParcelFileDescriptor;
+import android.provider.OpenableColumns;
+import android.provider.Settings;
+import android.system.Os;
+import android.util.Log;
+import android.view.Gravity;
+import android.view.View;
+import android.view.WindowInsets;
+import android.view.WindowManager;
+import android.widget.Button;
+import android.widget.CheckBox;
+import android.widget.LinearLayout;
+import android.widget.ScrollView;
+import android.widget.TextView;
+import android.widget.Toast;
+
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileOutputStream;
+import java.io.BufferedWriter;
+import java.io.OutputStreamWriter;
+import java.nio.charset.StandardCharsets;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+
+/** Routes to preparation or the main menu after checking the actual files. */
+public class Launcher extends Activity {
+    static final String DATA = "Danganronpa THH";
+    static final boolean DEFAULT_LANDSCAPE = true;
+
+    static final class Option {
+        final String key, pt, en;
+        final String[] values, labelsPt, labelsEn;
+        int pick;
+        final int defaultPick;
+
+        Option(String key, String pt, String en, String[] values, String[] labelsPt, String[] labelsEn, int pick) {
+            this.key = key;
+            this.pt = pt;
+            this.en = en;
+            this.values = values;
+            this.labelsPt = labelsPt;
+            this.labelsEn = labelsEn;
+            this.pick = pick;
+            this.defaultPick = pick;
+        }
+
+        void select(String value) {
+            pick = defaultPick;
+            for (int i = 0; i < values.length; i++) if (values[i].equals(value)) pick = i;
+        }
+    }
+
+    final List<Option> options = new ArrayList<>();
+    final Map<String, Boolean> drawerStates = new LinkedHashMap<>();
+    final Map<String, String> config = new LinkedHashMap<>();
+    TextView status;
+    Button play;
+    static final int PICK_ZIP = 1, PICK_FOLDER = 2, PICK_GAME = 3, PICK_KEYS = 4, PREPARE = 6, PICK_CPK = 7,
+            PICK_DRIVER = 8, PICK_UPDATE = 9;
+
+    String t(String portuguese, String english) { return Lang.t(portuguese, english); }
+
+    String label(Option o) { return t(o.labelsPt[o.pick], o.labelsEn[o.pick]); }
+
+    static File dataDir() { return new File(Environment.getExternalStorageDirectory(), DATA); }
+
+    static File installationDir(Context context) {
+        File dir = context.getExternalFilesDir(null);
+        if (dir == null) throw new IllegalStateException("App storage is unavailable. Try again after storage is mounted.");
+        return dir;
+    }
+
+    static final class Api30Helper {
+        static boolean isExternalStorageManager() {
+            return Environment.isExternalStorageManager();
+        }
+
+        static int[] safeArea(WindowInsets insets) {
+            android.graphics.Insets safe = insets.getInsets(
+                    WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            return new int[] {safe.left, safe.top, safe.right, safe.bottom};
+        }
+    }
+
+    boolean hasAccess() {
+        if (Build.VERSION.SDK_INT < 30)
+            return checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                    == android.content.pm.PackageManager.PERMISSION_GRANTED;
+        return Api30Helper.isExternalStorageManager();
+    }
+
+    // ---- source game file (needed only while installing the local game data) ----
+
+    SharedPreferences prefs() { return getSharedPreferences("game", MODE_PRIVATE); }
+
+    String gameUri() { return prefs().getString("uri", null); }
+
+    String gameName() { return prefs().getString("name", ""); }
+
+    String updateUri() { return prefs().getString("update_uri", null); }
+
+    String updateName() { return prefs().getString("update_name", ""); }
+
+    static File keysFile(Context c, String name) { return new File(new File(c.getFilesDir(), "keys"), name); }
+
+    boolean hasKeys() { return keysFile(this, "prod.keys").length() > 0; }
+
+    boolean gameReadable() {
+        try (ParcelFileDescriptor f = getContentResolver().openFileDescriptor(Uri.parse(gameUri()), "r")) {
+            return f != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    boolean updateReadable() {
+        if (updateUri() == null) return true;
+        try (ParcelFileDescriptor f = getContentResolver().openFileDescriptor(Uri.parse(updateUri()), "r")) {
+            return f != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    boolean directMode() { return prefs().getBoolean("direct_mode", false); }
+
+    void addStorageMode(LinearLayout layout) {
+        String[] modes = {t("Instalar em Android/data", "Install in Android/data"),
+                t("Rodar pelo NSP/XCI", "Run from NSP/XCI")};
+        addRow(layout, t("Modo de preparação", "Setup mode"), modes[directMode() ? 1 : 0], v ->
+                new LauncherDialog.Builder(this).setTitle(t("Modo de preparação", "Setup mode"))
+                        .setSingleChoiceItems(modes, directMode() ? 1 : 0, (dialog, index) -> {
+                            dialog.dismiss();
+                            boolean direct = index == 1;
+                            if (direct == directMode()) return;
+                            prefs().edit().putBoolean("direct_mode", direct).apply();
+                            installedCheck = new InstalledGameFiles.RecentCheck();
+                            refresh();
+                        }).setNegativeButton(t("Cancelar", "Cancel"), null).show());
+    }
+
+    boolean launchedGame;
+    volatile InstalledGameFiles.RecentCheck installedCheck = new InstalledGameFiles.RecentCheck();
+
+    void recoverDirectUpdate() {
+        new LauncherDialog.Builder(this)
+                .setTitle(t("Atualização não encontrada", "Update not found"))
+                .setMessage(t("Selecione novamente o NSP da atualização ou prepare apenas o jogo base.",
+                        "Select the update NSP again or prepare just the base game."))
+                .setPositiveButton(t("Selecionar novamente", "Select again"), (d, w) -> pick(PICK_UPDATE, "*/*", false))
+                .setNeutralButton(t("Usar só o jogo base", "Use base game only"), (d, w) -> {
+                    prefs().edit().remove("update_uri").remove("update_name").remove("direct_ready").apply();
+                    if (hasAccess() && hasKeys() && gameUri() != null && gameReadable()) prepare();
+                    else refresh();
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null).show();
+    }
+
+    boolean installedReady() throws IOException {
+        File installed = installationDir(this);
+        InstalledGameFiles.migrate(dataDir(), installed);
+        return installedCheck.ready(installed);
+    }
+
+    String displayName(Uri uri) {
+        try (Cursor c = getContentResolver().query(uri, new String[] {OpenableColumns.DISPLAY_NAME}, null, null, null)) {
+            if (c != null && c.moveToFirst()) return c.getString(0);
+        } catch (Exception ignored) {
+        }
+        String last = uri.getLastPathSegment();
+        return last == null ? "" : last.substring(last.lastIndexOf('/') + 1);
+    }
+
+    void pick(int request, String type, boolean multiple) {
+        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        i.addCategory(Intent.CATEGORY_OPENABLE);
+        i.setType(type);
+        if (multiple) i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+        startActivityForResult(i, request);
+    }
+
+    void onGamePicked(Uri uri) {
+        String name = displayName(uri);
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (!lower.endsWith(".nsp") && !lower.endsWith(".xci")) {
+            tell(t("Arquivo inválido", "Not a game file"),
+                    t("Escolha o arquivo .nsp ou .xci do jogo base, não o arquivo de atualização.",
+                            "Choose the base game's .nsp or .xci file (not the update's)."));
+            return;
+        }
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {  // a provider without persistable grants: works while the app runs
+        }
+        prefs().edit().putString("uri", uri.toString()).putString("name", name)
+                .remove("danganronpa_prepared_uri").remove("direct_ready").apply();
+    }
+
+    void onUpdatePicked(Uri uri) {
+        String name = displayName(uri);
+        String lower = name.toLowerCase(Locale.ROOT);
+        if (!lower.endsWith(".nsp")) {
+            tell(t("Arquivo inválido", "Not an update file"),
+                    t("Escolha a atualização do Danganronpa em formato .nsp.",
+                            "Choose the Danganronpa update in .nsp format."));
+            return;
+        }
+        try {
+            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (Exception ignored) {
+        }
+        prefs().edit().putString("update_uri", uri.toString()).putString("update_name", name).remove("direct_ready").apply();
+    }
+
+    // prod.keys (and title.keys, when the dump needs it): copied into the app's own storage, never shared or logged.
+    void onKeysPicked(Intent data) {
+        List<Uri> uris = new ArrayList<>();
+        ClipData clip = data.getClipData();
+        if (clip != null)
+            for (int k = 0; k < clip.getItemCount(); k++) uris.add(clip.getItemAt(k).getUri());
+        else if (data.getData() != null) uris.add(data.getData());
+        boolean prod = false;
+        for (Uri uri : uris) {
+            String name = displayName(uri).toLowerCase(Locale.ROOT);
+            String target = name.contains("title") ? "title.keys" : "prod.keys";
+            try (InputStream in = getContentResolver().openInputStream(uri)) {
+                byte[] buf = new byte[1 << 20];
+                int n = 0, r;
+                while (in != null && n < buf.length && (r = in.read(buf, n, buf.length - n)) > 0) n += r;
+                String text = new String(buf, 0, n, "UTF-8");
+                if (target.equals("prod.keys") && !text.contains("header_key") && !text.contains("master_key_00")) continue;
+                File f = keysFile(this, target);
+                f.getParentFile().mkdirs();
+                try (OutputStream out = new FileOutputStream(f)) {
+                    out.write(buf, 0, n);
+                }
+                prod |= target.equals("prod.keys");
+            } catch (Exception ignored) {
+            }
+        }
+        if (!prod && !hasKeys())
+            tell(t("Chaves inválidas", "Not a keys file"),
+                    t("Esse arquivo não contém as chaves (header_key). Escolha o prod.keys do seu console.",
+                            "That file has no keys (header_key). Choose your console's prod.keys."));
+    }
+
+    void prepare() {
+        Intent i = new Intent(this, ImportActivity.class);
+        i.putExtra(ImportActivity.EXTRA_URI, gameUri());
+        i.putExtra(ImportActivity.EXTRA_NAME, gameName());
+        i.putExtra(ImportActivity.EXTRA_UPDATE_URI, updateUri());
+        i.putExtra(ImportActivity.EXTRA_UPDATE_NAME, updateName());
+        i.putExtra("direct_mode", directMode());
+        startActivityForResult(i, PREPARE);
+    }
+
+    @Override
+    protected void onCreate(Bundle state) {
+        super.onCreate(state);
+        if (state != null) {
+            Bundle drawers = state.getBundle("drawers");
+            if (drawers != null)
+                for (String key : drawers.keySet()) drawerStates.put(key, drawers.getBoolean(key));
+        }
+        Lang.load(this);
+        applyLauncherOrientation();
+        LauncherTheme.apply(this);
+        if (launcherLandscape()) getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
+        options.add(new Option("RESOLUTION", "Resolução de saída", "Output resolution",
+                new String[] {"360p", "480p", "720p", "1080p"},
+                new String[] {"360p", "480p", "720p", "1080p"},
+                new String[] {"360p", "480p", "720p", "1080p"}, 2));
+        options.add(new Option("NX_STRETCH", "Formato da tela", "Screen format",
+                new String[] {"0", "16:10", "1"},
+                new String[] {"16:9", "16:10", "Esticar"},
+                new String[] {"16:9", "16:10", "Stretch"}, 0));
+        options.add(new Option("NX_FPS_CAP", "Limite de FPS", "FPS limit", new String[] {"30", "45", "60"},
+                new String[] {"30 FPS", "45 FPS", "60 FPS"},
+                new String[] {"30 FPS", "45 FPS", "60 FPS"}, 0));
+        options.add(new Option("NX_MAX_ANISO", "Filtragem anisotrópica", "Anisotropic filtering",
+                new String[] {"1", "2", "4", "8", "16"},
+                new String[] {"Desativada (mais desempenho)", "2x (rápido)", "4x (padrão)",
+                        "8x (mais qualidade)", "16x (qualidade máxima)"},
+                new String[] {"Off (best performance)", "2x (faster)", "4x (default)",
+                        "8x (higher quality)", "16x (best quality)"}, 2));
+        options.add(new Option("NX_OVERLAY_SIZE", "Tamanho do overlay", "Overlay size",
+                new String[] {"50", "80", "100", "125", "150"},
+                new String[] {"50%", "80%", "100% (padrão)", "125%", "150%"},
+                new String[] {"50%", "80%", "100% (default)", "125%", "150%"}, 2));
+        options.add(new Option("NX_SHOW_FPS", "FPS", "FPS", new String[] {"0", "1"},
+                new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
+        for (String metric : new String[] {"CPU", "GPU", "RAM"}) {
+            options.add(new Option("NX_OVERLAY_" + metric, metric, metric, new String[] {"0", "1"},
+                    new String[] {"Desativado", "Ativado"}, new String[] {"Off", "On"}, 0));
+        }
+        options.add(new Option("NX_TRACE_PERF", "Estatísticas detalhadas de desempenho", "Detailed performance logging",
+                new String[] {"0", "1"}, new String[] {"Desativado", "Ativado"},
+                new String[] {"Off", "On"}, 0));
+        options.add(new Option("NX_TOUCH_SHOW", "Controles na tela", "On-screen controls", new String[] {"1", "0"},
+                new String[] {"Ativados", "Desativados"}, new String[] {"On", "Off"}, 0));
+        options.add(new Option("NX_GAMEPAD_LAYOUT", "Layout do controle físico", "Gamepad layout",
+                new String[] {"0", "1"}, new String[] {"Nintendo (A à direita)", "Xbox (A embaixo)"},
+                new String[] {"Nintendo (A right)", "Xbox (A bottom)"}, 1));
+        options.add(new Option("NX_TOUCH_LEFT_STICK_MODE", "Modo do analógico esquerdo", "Left analog mode",
+                new String[] {"fixed", "floating"}, new String[] {"Fixo", "Flutuante"},
+                new String[] {"Fixed", "Floating"}, 0));
+        options.add(new Option("NX_TOUCH_SIZE", "Tamanho dos botões", "Button size",
+                new String[] {"80", "100", "125"}, new String[] {"Pequeno", "Normal", "Grande"},
+                new String[] {"Small", "Normal", "Large"}, 1));
+        options.add(new Option("NX_TOUCH_OPACITY", "Opacidade dos botões", "Button opacity",
+                new String[] {"50", "85", "100"}, new String[] {"Baixa", "Normal", "Alta"},
+                new String[] {"Low", "Normal", "High"}, 1));
+        options.add(new Option("NX_STICK_SENSITIVITY", "Sensibilidade do analógico", "Touch stick sensitivity",
+                new String[] {"50", "75", "100", "125", "150", "200"},
+                new String[] {"50%", "75%", "100%", "125%", "150%", "200%"},
+                new String[] {"50%", "75%", "100%", "125%", "150%", "200%"}, 2));
+        options.add(new Option("NX_CAMERA_SENSITIVITY", "Sensibilidade da câmera", "Touch camera sensitivity",
+                new String[] {"50", "75", "100", "125", "150", "200", "250"},
+                new String[] {"50%", "75%", "100%", "125%", "150%", "200%", "250%"},
+                new String[] {"50%", "75%", "100%", "125%", "150%", "200%", "250%"}, 2));
+        build(false);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        Intent intent = getIntent();
+        if (intent.hasExtra("game_error") || (launchedGame && !intent.getBooleanExtra("returned_to_menu", false)))
+            installedCheck = new InstalledGameFiles.RecentCheck();
+        launchedGame = false;
+        intent.removeExtra("returned_to_menu");
+        refresh();
+        showGameError(intent);
+    }
+
+    @Override protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+    }
+
+    void showGameError(Intent intent) {
+        String error = intent.getStringExtra("game_error");
+        if (error != null) {
+            intent.removeExtra("game_error");
+            tell(t("Não foi possível abrir o jogo", "Could not open the game"), error);
+        }
+    }
+
+    @Override protected void onSaveInstanceState(Bundle state) {
+        super.onSaveInstanceState(state);
+        Bundle drawers = new Bundle();
+        for (Map.Entry<String, Boolean> entry : drawerStates.entrySet())
+            drawers.putBoolean(entry.getKey(), entry.getValue());
+        state.putBundle("drawers", drawers);
+    }
+
+    boolean readyForPlay;
+    boolean launcherLandscape() {
+        return getSharedPreferences("launcher", MODE_PRIVATE)
+                .getBoolean("landscape", DEFAULT_LANDSCAPE);
+    }
+
+    void applyLauncherOrientation() {
+        boolean landscape = launcherLandscape();
+        setRequestedOrientation(landscape ? android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+                : android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_PORTRAIT);
+    }
+    int refreshGeneration;
+
+    @Override protected void onDestroy() {
+        if (modManager != null) modManager.dismiss();
+        if (driverSelector != null) driverSelector.dismiss();
+        super.onDestroy();
+    }
+
+    private LinearLayout settingsGroup(LinearLayout root, String key, String title, String subtitle, boolean open) {
+        if (drawerStates.containsKey(key)) open = drawerStates.get(key);
+        drawerStates.put(key, open);
+        LinearLayout card = new LinearLayout(this);
+        card.setOrientation(LinearLayout.VERTICAL);
+        android.graphics.drawable.GradientDrawable background = new android.graphics.drawable.GradientDrawable();
+        background.setColor(LauncherTheme.PANEL);
+        background.setCornerRadius(dp(3));
+        card.setBackground(background);
+        LinearLayout.LayoutParams spacing = new LinearLayout.LayoutParams(-1, -2);
+        spacing.bottomMargin = dp(8);
+        root.addView(card, spacing);
+        Button header = new Button(this);
+        LauncherTheme.button(header, false);
+        compactButton(header);
+        header.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        header.setTextSize(15);
+        card.addView(header, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout body = new LinearLayout(this);
+        body.setOrientation(LinearLayout.VERTICAL);
+        body.setPadding(dp(10), dp(4), dp(10), dp(8));
+        TextView hint = new TextView(this);
+        hint.setText(subtitle);
+        hint.setTextColor(LauncherTheme.MUTED);
+        hint.setTextSize(12);
+        hint.setPadding(0, 0, 0, dp(4));
+        hint.setVisibility(subtitle.isEmpty() ? View.GONE : View.VISIBLE);
+        body.addView(hint);
+        card.addView(body, new LinearLayout.LayoutParams(-1, -2));
+        // Preserve expansion across refreshes and Activity recreation during this visit.
+        body.setVisibility(open ? View.VISIBLE : View.GONE);
+        header.setText((open ? "−  " : "+  ") + title);
+        header.setContentDescription(title + (open ? ", collapse" : ", expand"));
+        header.setOnClickListener(v -> {
+            boolean expanded = body.getVisibility() != View.VISIBLE;
+            drawerStates.put(key, expanded);
+            body.setVisibility(expanded ? View.VISIBLE : View.GONE);
+            header.setText((expanded ? "−  " : "+  ") + title);
+            header.setContentDescription(title + (expanded ? ", collapse" : ", expand"));
+        });
+        return body;
+    }
+
+    private void addLauncherSettings(LinearLayout parent) {
+        LinearLayout launcherSettings = settingsGroup(parent, "launcher", t("Configurações do launcher", "Launcher settings"),
+                t("Idioma e orientação", "Language and orientation"), false);
+        addRow(launcherSettings, t("Idioma do launcher", "Launcher language"),
+                Lang.currentName(), v -> showLanguagePicker());
+
+        addRow(launcherSettings, t("Orientação do launcher", "Launcher orientation"),
+                getSharedPreferences("launcher", MODE_PRIVATE).getBoolean("landscape", DEFAULT_LANDSCAPE)
+                        ? t("Horizontal", "Landscape") : t("Vertical", "Portrait"), v -> {
+                    SharedPreferences settings = getSharedPreferences("launcher", MODE_PRIVATE);
+                    settings.edit().putBoolean("landscape",
+                            !settings.getBoolean("landscape", DEFAULT_LANDSCAPE)).apply();
+                    applyLauncherOrientation();
+                });
+        addRow(launcherSettings, t("Redefinir configurações", "Reset settings"),
+                t("Redefinir", "Reset"), v -> new LauncherDialog.Builder(this)
+                        .setMessage(t("Redefinir o idioma e a orientação do launcher?",
+                                "Reset the launcher language and orientation?"))
+                        .setNegativeButton(t("Cancelar", "Cancel"), null)
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
+                            getSharedPreferences("launcher", MODE_PRIVATE).edit().remove("language").remove("landscape").apply();
+                            Lang.load(this);
+                            applyLauncherOrientation();
+                            build(readyForPlay);
+                            refresh();
+                        }).show());
+    }
+
+    void build(boolean ready) {
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setBackgroundColor(LauncherTheme.BACKGROUND);
+        root.setPadding(dp(18), dp(10), dp(18), dp(14));
+
+        TextView title = new TextView(this);
+        title.setText("DANGANRONPA");
+        title.setTextColor(LauncherTheme.ACCENT);
+        title.setPadding(0, dp(4), 0, dp(2));
+        title.setTextSize(32);
+        title.setTypeface(Typeface.create("sans-serif-condensed", Typeface.BOLD_ITALIC));
+        root.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        TextView version = new TextView(this);
+        version.setText("TRIGGER HAPPY HAVOC  /  0.0.1  ·  " + t("EM TESTES", "EXPERIMENTAL"));
+        version.setTextColor(LauncherTheme.TEXT);
+        version.setLetterSpacing(0.08f);
+        version.setTextSize(12);
+        version.setTypeface(Typeface.DEFAULT_BOLD);
+        version.setPadding(0, dp(3), 0, 0);
+        root.addView(version);
+        View rule = new View(this);
+        rule.setBackgroundColor(LauncherTheme.ACCENT);
+        LinearLayout.LayoutParams ruleLayout = new LinearLayout.LayoutParams(-1, dp(2));
+        ruleLayout.topMargin = dp(8);
+        root.addView(rule, ruleLayout);
+
+        status = new TextView(this);
+        status.setTextColor(LauncherTheme.MUTED);
+        status.setTextSize(13);
+        status.setPadding(0, dp(4), 0, dp(8));
+        root.addView(status);
+
+        if (!ready) {
+        LauncherTheme.section(root, t("Preparação do jogo", "Game setup"));
+        addStorageMode(root);
+        addRow(root, t("Arquivo do jogo (.nsp / .xci)", "Game file (.nsp / .xci)"), t("Escolher", "Choose"),
+                new View.OnClickListener() {
+                    @Override
+                    public void onClick(View v) {
+                        pick(PICK_GAME, "*/*", false);
+                    }
+                });
+        addRow(root, t("Atualização do Danganronpa .nsp (opcional)", "Danganronpa update .nsp (optional)"),
+                updateUri() == null ? t("Escolher", "Choose") : updateName(), v -> pick(PICK_UPDATE, "*/*", false));
+        addRow(root, t("Chaves (prod.keys)", "Keys (prod.keys)"), t("Escolher", "Choose"), new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                pick(PICK_KEYS, "*/*", true);
+            }
+        });
+
+
+        play = new Button(this);
+        LauncherTheme.button(play, true);
+        play.setAllCaps(false);
+        play.setText(t("Preparar jogo", "Prepare"));
+        play.setTextSize(18);
+        root.addView(play, new LinearLayout.LayoutParams(-1, dp(54)));
+        play.setOnClickListener(v -> {
+            if (!hasAccess()) askAccess();
+            else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
+            else if (directMode() && !updateReadable()) recoverDirectUpdate();
+            else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
+            else { prefs().edit().remove("danganronpa_prepared_uri").apply(); prepare(); }
+        });
+        addLauncherSettings(root);
+        ScrollView setup = new ScrollView(this);
+        setup.setBackgroundColor(LauncherTheme.BACKGROUND);
+        setup.setFillViewport(true);
+        setup.addView(root);
+        setContentView(setup);
+        applySafeAreaInsets(setup);
+        return;
+        }
+
+        play = new Button(this);
+        play.setTextSize(18);
+        LauncherTheme.button(play, true);
+        play.setText(t("Jogar", "Play"));
+        LinearLayout.LayoutParams playLayout = new LinearLayout.LayoutParams(-1, dp(54));
+        playLayout.leftMargin = dp(18);
+        playLayout.rightMargin = dp(18);
+        playLayout.bottomMargin = dp(10);
+        play.setOnClickListener(v -> installShadersAndPlay());
+
+        LinearLayout quick = settingsGroup(root, "display", t("Tela e gráficos", "Display and graphics"), "", false);
+        LinearLayout controls = settingsGroup(root, "controls", t("Controles", "Controls"), "", false);
+        LinearLayout content = settingsGroup(root, "content", t("Jogo, saves e mods", "Game, saves and mods"), "", false);
+        addLauncherSettings(root);
+        LinearLayout overlay = settingsGroup(root, "overlay", t("Monitor de desempenho", "Performance monitor"), "", false);
+        LinearLayout support = settingsGroup(root, "more", t("Mais opções", "More options"), "", false);
+        addRow(quick, t("Predefinição gráfica", "Graphics preset"), t("Escolher", "Choose"), v ->
+                new LauncherDialog.Builder(this).setTitle(t("Predefinição gráfica", "Graphics preset"))
+                        .setItems(new String[] {t("Desempenho", "Performance"), t("Equilibrado", "Balanced"), t("Qualidade", "Quality")},
+                                (dialog, which) -> applyPreset(new String[] {"performance", "normal", "quality"}[which])).show());
+        addRow(support, t("Perfis salvos", "Saved profiles"), t("Escolher", "Choose"), v ->
+                new LauncherDialog.Builder(this).setTitle(t("Perfis salvos", "Saved profiles"))
+                        .setItems(new String[] {t("Perfil 1", "Profile 1"), t("Perfil 2", "Profile 2"), t("Perfil 3", "Profile 3")},
+                                (dialog, which) -> showProfile(which + 1)).show());
+
+        LauncherTheme.section(content, t("Atualização do jogo", "Game update"));
+        addStorageMode(content);
+        TextView updateHelp = new TextView(this);
+        updateHelp.setText(directMode() ? t("Mantenha o jogo base e o update acessíveis para jogar.", "Keep the base game and update accessible to play.") : t(
+                "Para aplicar o update, selecione novamente o NSP/XCI original e o update NSP. A atualização depende de blocos do jogo base. Depois da preparação, os arquivos NSP não serão necessários para jogar.",
+                "To apply an update, select the original NSP/XCI again and the update NSP. A Switch update depends on blocks from the base game and cannot use only the already extracted files. Neither NSP is needed to play after preparation finishes."));
+        updateHelp.setTextColor(LauncherTheme.MUTED);
+        updateHelp.setTextSize(14);
+        updateHelp.setPadding(0, dp(4), 0, dp(8));
+        content.addView(updateHelp);
+        addRow(content, t("Jogo base original (NSP/XCI)", "Original base game (NSP/XCI)"),
+                gameUri() == null ? t("Escolher", "Choose") : gameName(), v -> pick(PICK_GAME, "*/*", false));
+        addRow(content, t("Arquivo do update (.nsp)", "Update file (.nsp)"),
+                updateUri() == null ? t("Escolher", "Choose") : updateName(), v -> pick(PICK_UPDATE, "*/*", false));
+        addRow(content, t("Aplicar update", "Apply update"), t("Preparar", "Prepare"), v -> {
+            if (!hasAccess()) askAccess();
+            else if (gameUri() == null || !gameReadable()) pick(PICK_GAME, "*/*", false);
+            else if (updateUri() == null || !updateReadable()) pick(PICK_UPDATE, "*/*", false);
+            else if (!hasKeys()) pick(PICK_KEYS, "*/*", true);
+            else prepare();
+        });
+        LauncherTheme.section(content, t("Saves e mods", "Saves & mods"));
+        LinearLayout diagnostics = settingsGroup(support, "logs", t("Logs e diagnóstico", "Logs & diagnostics"), "", false);
+        LauncherTheme.section(support, t("Comunidade", "Community"));
+        addRow(support, "GitHub", t("Abrir", "Open"),
+                v -> openExternal("https://github.com/nxdevxz/danganronpa-android"));
+        addRow(support, "Discord", t("Entrar", "Join"),
+                v -> openExternal("https://discord.gg/yF6FtNK6rM"));
+        addRow(support, t("Reportar um problema", "Report an issue"), t("Abrir", "Open"),
+                v -> openExternal("https://github.com/nxdevxz/danganronpa-android/issues/new/choose"));
+        for (final Option o : options) {
+            String group = optionGroup(o.key);
+            if (isOverlayToggle(o.key)) {
+                CheckBox toggle = new CheckBox(this);
+                toggle.setText(t(o.pt, o.en));
+                toggle.setTextColor(LauncherTheme.TEXT);
+                toggle.setTextSize(16);
+                toggle.setMinHeight(dp(44));
+                toggle.setPadding(dp(4), 0, dp(4), 0);
+                toggle.setButtonTintList(android.content.res.ColorStateList.valueOf(LauncherTheme.ACCENT));
+                toggle.setChecked("1".equals(o.values[o.pick]));
+                toggle.setTag(o);
+                toggle.setOnClickListener(v -> {
+                    o.pick = ((CheckBox) v).isChecked() ? 1 : 0;
+                    save();
+                });
+                overlay.addView(toggle, new LinearLayout.LayoutParams(-1, -2));
+                continue;
+            }
+            LinearLayout row = new LinearLayout(this);
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(0, dp(2), 0, dp(2));
+            TextView name = new TextView(this);
+            name.setText(t(o.pt, o.en));
+            name.setTextColor(Color.WHITE);
+            name.setTextSize(16);
+            row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+            final Button value = new Button(this);
+            LauncherTheme.button(value, false);
+            compactButton(value);
+            value.setAllCaps(false);
+            value.setMinWidth(dp(110));
+            value.setMaxWidth(dp(160));
+            row.addView(value);
+            value.setOnClickListener(v -> {
+                String[] labels = new String[o.values.length];
+                for (int i = 0; i < labels.length; i++) labels[i] = t(o.labelsPt[i], o.labelsEn[i]);
+                new LauncherDialog.Builder(this).setTitle(t(o.pt, o.en)).setSingleChoiceItems(labels, o.pick, (dialog, which) -> {
+                    dialog.dismiss();
+                    o.pick = which;
+                    if (save()) value.setText(label(o));
+                }).show();
+            });
+            value.setTag(o);
+            (group.equals("logs") ? diagnostics :
+                    group.equals("overlay") ? overlay : group.equals("controls") ? controls : quick).addView(row);
+        }
+        addDriverRow(quick);
+        addLogsRow(diagnostics);
+
+        LinearLayout edit = new LinearLayout(this);
+        edit.setOrientation(LinearLayout.HORIZONTAL);
+        edit.setGravity(Gravity.CENTER_VERTICAL);
+        edit.setPadding(0, dp(2), 0, dp(2));
+        TextView editName = new TextView(this);
+        editName.setText(t("Posição dos controles", "Controls position"));
+        editName.setTextColor(Color.WHITE);
+        editName.setTextSize(16);
+        edit.addView(editName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button editButton = new Button(this);
+        LauncherTheme.button(editButton, false);
+        compactButton(editButton);
+        editButton.setAllCaps(false);
+        editButton.setMinWidth(dp(110));
+        editButton.setText(t("Editar layout", "Edit layout"));
+        edit.addView(editButton);
+        editButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!hasAccess()) {
+                    askAccess();
+                    return;
+                }
+                save();
+                startActivity(new Intent(Launcher.this, ControlsEditor.class));
+            }
+        });
+        controls.addView(edit);
+
+        // Keep the reset action as the final item in every settings section.
+        addResetRow(quick, "quick");
+        addResetRow(controls, "controls");
+        addResetRow(overlay, "overlay");
+        addResetRow(diagnostics, "logs");
+
+        // Saves: in from a ZIP or a folder (a Switch backup or another player's), out to a ZIP in Download.
+        LinearLayout saves = new LinearLayout(this);
+        saves.setOrientation(LinearLayout.HORIZONTAL);
+        saves.setGravity(Gravity.CENTER_VERTICAL);
+        saves.setPadding(0, dp(2), 0, dp(2));
+        TextView savesName = new TextView(this);
+        savesName.setText(t("Saves", "Saves"));
+        savesName.setTextColor(Color.WHITE);
+        savesName.setTextSize(16);
+        saves.addView(savesName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button importButton = new Button(this);
+        LauncherTheme.button(importButton, false);
+        compactButton(importButton);
+        importButton.setAllCaps(false);
+        importButton.setMinWidth(dp(88));
+        importButton.setText(t("Importar", "Import"));
+        saves.addView(importButton);
+        Button exportButton = new Button(this);
+        LauncherTheme.button(exportButton, false);
+        compactButton(exportButton);
+        exportButton.setAllCaps(false);
+        exportButton.setMinWidth(dp(88));
+        exportButton.setText(t("Exportar", "Export"));
+        saves.addView(exportButton);
+        importButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!hasAccess()) {
+                    askAccess();
+                    return;
+                }
+                askImport();
+            }
+        });
+        exportButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!hasAccess()) {
+                    askAccess();
+                    return;
+                }
+                exportSaves();
+            }
+        });
+        content.addView(saves);
+
+        // Translation CPK import
+        LinearLayout transRow = new LinearLayout(this);
+        transRow.setOrientation(LinearLayout.HORIZONTAL);
+        transRow.setGravity(Gravity.CENTER_VERTICAL);
+        transRow.setPadding(0, dp(2), 0, dp(2));
+        TextView transName = new TextView(this);
+        transName.setText(t("Tradução / Mod CPK", "Translation / CPK mod"));
+        transName.setTextColor(Color.WHITE);
+        transName.setTextSize(16);
+        transRow.addView(transName, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button transButton = new Button(this);
+        LauncherTheme.button(transButton, false);
+        compactButton(transButton);
+        transButton.setAllCaps(false);
+        transButton.setMinWidth(dp(110));
+        transButton.setText(t("Importar CPK", "Import CPK"));
+        transRow.addView(transButton);
+        transButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (!hasAccess()) {
+                    askAccess();
+                    return;
+                }
+                pick(PICK_CPK, "*/*", false);
+            }
+        });
+        content.addView(transRow);
+        addModsRow(content);
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.setBackgroundColor(LauncherTheme.BACKGROUND);
+        scroll.setFillViewport(true);
+        scroll.addView(root);
+        LinearLayout screen = new LinearLayout(this);
+        screen.setOrientation(LinearLayout.VERTICAL);
+        screen.setBackgroundColor(LauncherTheme.BACKGROUND);
+        screen.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        screen.addView(play, playLayout);
+        setContentView(screen);
+        applySafeAreaInsets(screen);
+    }
+
+    boolean installingShaders;
+
+    static String optionGroup(String key) {
+        if (key.equals("NX_TRACE_PERF")) return "logs";
+        if (key.equals("NX_SHOW_FPS") || key.startsWith("NX_OVERLAY_")) return "overlay";
+        if (key.equals("NX_GAMEPAD_LAYOUT") || key.startsWith("NX_TOUCH_") || key.equals("NX_STICK_SENSITIVITY") || key.equals("NX_CAMERA_SENSITIVITY")) return "controls";
+        return "quick";
+    }
+
+    static boolean isOverlayToggle(String key) {
+        return key.equals("NX_SHOW_FPS") || key.equals("NX_OVERLAY_CPU") ||
+                key.equals("NX_OVERLAY_GPU") || key.equals("NX_OVERLAY_RAM");
+    }
+
+    static String[] presetValues(String preset) {
+        if ("performance".equals(preset)) return new String[] {"480p", "30", "1"};
+        if ("quality".equals(preset)) return new String[] {"1080p", "30", "16"};
+        return new String[] {"720p", "30", "4"};
+    }
+
+    private void applyPreset(String preset) {
+        String[] keys = {"RESOLUTION", "NX_FPS_CAP", "NX_MAX_ANISO"};
+        String[] values = presetValues(preset);
+        for (Option option : options)
+            for (int i = 0; i < keys.length; i++)
+                if (keys[i].equals(option.key)) option.select(values[i]);
+        if (save()) {
+            updateButtons(getWindow().getDecorView());
+            Toast.makeText(this, t("Predefinição aplicada", "Preset applied"), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private void addResetRow(LinearLayout parent, String group) {
+        addRow(parent, t("Redefinir configurações", "Reset settings"), t("Redefinir", "Reset"),
+                v -> new LauncherDialog.Builder(this)
+                        .setMessage(t("Redefinir as configurações desta seção para o padrão?",
+                                "Reset this section's settings to defaults?"))
+                        .setNegativeButton(t("Cancelar", "Cancel"), null)
+                        .setPositiveButton(t("Redefinir", "Reset"), (dialog, which) -> {
+                            for (Option o : options) if (optionGroup(o.key).equals(group)) o.pick = o.defaultPick;
+                            save();
+                            updateButtons(getWindow().getDecorView());
+                        }).show());
+    }
+
+    private void showLanguagePicker() {
+        new LauncherDialog.Builder(this)
+                .setTitle(t("Idioma do launcher", "Launcher language"))
+                .setSingleChoiceItems(Lang.names(), Lang.currentIndex(), (dialog, which) -> {
+                    Lang.select(this, which);
+                    dialog.dismiss();
+                    build(readyForPlay);
+                    refresh();
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null)
+                .show();
+    }
+
+    private void showProfile(int slot) {
+        SharedPreferences profile = getSharedPreferences("profile_" + slot, MODE_PRIVATE);
+        String title = t("Perfil ", "Profile ") + slot;
+        new LauncherDialog.Builder(this).setTitle(title)
+                .setItems(new String[] {t("Carregar", "Load"), t("Salvar configuração atual", "Save current settings")}, (dialog, action) -> {
+                    if (action == 0) {
+                        if (!profile.getBoolean("saved", false)) {
+                            tell(title, t("Este perfil ainda está vazio.", "This profile is empty."));
+                            return;
+                        }
+                        for (Option o : options) {
+                            String value = profile.getString(o.key, o.values[o.defaultPick]);
+                            o.select(value);
+                        }
+                        save();
+                        updateButtons(getWindow().getDecorView());
+                    } else {
+                        new LauncherDialog.Builder(this).setTitle(title)
+                                .setMessage(t("Salvar as opções atuais neste perfil? Substitui o perfil anterior.",
+                                        "Save current options here? This replaces the previous profile."))
+                                .setNegativeButton(t("Cancelar", "Cancel"), null)
+                                .setPositiveButton(t("Salvar", "Save"), (confirm, which) -> {
+                                    SharedPreferences.Editor edit = profile.edit().clear().putBoolean("saved", true);
+                                    for (Option o : options) edit.putString(o.key, o.values[o.pick]);
+                                    if (!edit.commit()) tell(title, t("Não foi possível salvar.", "Could not save."));
+                                    else Toast.makeText(this, t("Perfil salvo", "Profile saved"), Toast.LENGTH_SHORT).show();
+                                }).show();
+                    }
+                }).show();
+    }
+
+    void installShadersAndPlay() {
+        if (!hasAccess()) { askAccess(); return; }
+        // Cache readiness was checked off the UI thread by refresh(). Missing stages
+        // are compiled by the renderer on first use, never installed from APK assets.
+        launchAfterShaderInstall();
+    }
+
+    void launchAfterShaderInstall() {
+        if (importingSaves || importingCpk || importingDriver || (modManager != null && modManager.busy())
+                || (driverSelector != null && driverSelector.busy())) return;
+        if (!readyForPlay) { refresh(); return; }
+        try { SaveFiles.recover(); }
+        catch (IOException e) { tell(t("Falha ao recuperar os saves", "Save recovery failed"), String.valueOf(e.getMessage())); return; }
+        if (!save()) return;
+        Intent i = new Intent(this, GameActivity.class);
+        i.putExtra(ImportActivity.EXTRA_NAME, gameName());
+        if (directMode()) {
+            i.putExtra(ImportActivity.EXTRA_URI, gameUri());
+            i.putExtra(ImportActivity.EXTRA_UPDATE_URI, updateUri());
+            i.putExtra(ImportActivity.EXTRA_UPDATE_NAME, updateName());
+        }
+        launchedGame = true;
+        startActivity(i);
+    }
+
+    void refresh() {
+        if (installingShaders || importingSaves || isFinishing() || isDestroyed()) return;
+        final int generation = ++refreshGeneration;
+        play.setEnabled(false);
+        status.setText(t("Verificando a instalação…", "Checking preparation…"));
+        new Thread(() -> {
+            final boolean access = hasAccess();
+            if (access && new File(dataDir(), "game/installed.tsv").isFile()) runOnUiThread(() -> {
+                if (generation == refreshGeneration && !isFinishing() && !isDestroyed()) {
+                    getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                    status.setText(t("Verificando os dados instalados…", "Checking or moving installed game data…"));
+                }
+            });
+            final boolean direct = directMode();
+            final String base = gameUri();
+            final boolean keys = hasKeys();
+            final boolean directBaseReadable = access && direct && base != null && gameReadable();
+            final boolean updateMissing = directBaseReadable && !updateReadable();
+            boolean checkedReady = false;
+            String storageProblem = "";
+            try {
+                checkedReady = direct ? directBaseReadable && !updateMissing && keys &&
+                        base.equals(prefs().getString("direct_ready", "")) : access && installedReady();
+            } catch (Exception e) {
+                storageProblem = String.valueOf(e.getMessage());
+                Log.w("Danganronpa-Launch", "Could not check installed game data", e);
+            }
+            final boolean ready = checkedReady;
+            final String storageError = storageProblem;
+            final boolean readable = direct ? directBaseReadable : access && !ready && base != null && gameReadable();
+            String preparationError;
+            try { preparationError = access ? PreparationFiles.failure(InstalledGameFiles.shaders(installationDir(this))) : ""; }
+            catch (Exception e) { preparationError = String.valueOf(e.getMessage()); }
+            final String shaderError = preparationError;
+            runOnUiThread(() -> {
+                if (generation != refreshGeneration || isFinishing() || isDestroyed()) return;
+                getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                readyForPlay = ready;
+                load();
+                for (Option o : options) {
+                    o.select(config.get(o.key));
+                }
+                build(ready);
+                updateButtons(getWindow().getDecorView());
+                play.setEnabled(true);
+                if (ready) {
+                    String revision;
+                    try { revision = directMode() ? gameName() : InstalledGameFiles.revision(InstalledGameFiles.game(installationDir(this))); }
+                    catch (Exception e) { revision = "unknown"; }
+                    status.setText(t("Pronto para jogar · " + revision, "Ready to play · " + revision));
+                    play.setText(t("Jogar", "Play"));
+                } else {
+                    String game = gameUri() == null ? t("Nenhum jogo selecionado", "No game selected") : gameName();
+                    status.setText(game + "\nprod.keys: " + (keys ? t("selecionado", "selected") : t("não selecionado", "not selected")) +
+                        (!access ? t("\nPermita o acesso aos arquivos para preparar o jogo.", "\nAllow file access to prepare the game.") :
+                         !readable && gameUri() != null ? t("\nSelecione novamente o arquivo do jogo.", "\nSelect the game file again.") :
+                         updateMissing ? t("\nAtualização não encontrada. Selecione novamente o NSP ou use só o jogo base.", "\nUpdate not found. Select the NSP again or use just the base game.") :
+                         readable && keys && directMode() ? t("\nMantenha o arquivo acessível para jogar.", "\nKeep the file accessible to play.") :
+                         readable && keys ? t("\nInstale os dados para continuar. Mantenha o NSP/XCI até o fim da instalação.", "\nInstall the game data to continue. Keep the NSP/XCI until installation finishes.") : "") +
+                        (storageError.isEmpty() ? "" : "\n" + storageError) +
+                        (shaderError.isEmpty() ? "" : t("\nFalha ao gerar shaders:\n", "\nShader generation failed:\n") + shaderError));
+                    play.setText(updateMissing ? t("Resolver atualização", "Resolve update") : t("Preparar jogo", "Prepare"));
+                }
+            });
+        }, "Danganronpa-setup-check").start();
+    }
+
+    void updateButtons(View v) {
+        if (v instanceof CheckBox && v.getTag() instanceof Option) {
+            Option o = (Option) v.getTag();
+            ((CheckBox) v).setChecked("1".equals(o.values[o.pick]));
+        } else if (v instanceof Button && v.getTag() instanceof Option) {
+            Option o = (Option) v.getTag();
+            ((Button) v).setText(label((Option) v.getTag()));
+        } else if (v instanceof android.view.ViewGroup) {
+            android.view.ViewGroup g = (android.view.ViewGroup) v;
+            for (int k = 0; k < g.getChildCount(); k++) updateButtons(g.getChildAt(k));
+        }
+    }
+
+    void tell(String title, String message) {
+        new LauncherDialog.Builder(this).setTitle(title).setMessage(message).setPositiveButton("OK", null).show();
+    }
+
+    void openExternal(String url) {
+        try {
+            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)));
+        } catch (Exception e) {
+            tell(t("Não foi possível abrir o link", "Could not open link"), url);
+        }
+    }
+
+    void askImport() {
+        new LauncherDialog.Builder(this)
+                .setTitle(t("Importar saves", "Import saves"))
+                .setMessage(t("Escolha um arquivo ZIP ou uma pasta com saves do Danganronpa THH. "
+                                + "Seus saves atuais serão copiados antes da importação.",
+                        "Pick a ZIP file or a folder with Danganronpa THH saves (for example, a ZIP exported earlier). Your current saves "
+                                + "are copied aside first."))
+                .setPositiveButton(t("Arquivo ZIP", "ZIP file"), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+                        i.addCategory(Intent.CATEGORY_OPENABLE);
+                        i.setType("*/*");
+                        i.putExtra(Intent.EXTRA_MIME_TYPES, new String[] {"application/zip",
+                                "application/x-zip-compressed", "application/octet-stream"});
+                        startActivityForResult(i, PICK_ZIP);
+                    }
+                })
+                .setNeutralButton(t("Pasta", "Folder"), new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface d, int which) {
+                        startActivityForResult(new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE), PICK_FOLDER);
+                    }
+                })
+                .setNegativeButton(t("Cancelar", "Cancel"), null)
+                .show();
+    }
+
+    @Override
+    protected void onActivityResult(int request, int result, Intent data) {
+        super.onActivityResult(request, result, data);
+        if (request == PREPARE) {
+            installedCheck = new InstalledGameFiles.RecentCheck();
+            if (result == RESULT_OK && gameUri() != null) {
+                prefs().edit().putString(directMode() ? "direct_ready" : "danganronpa_prepared_uri", gameUri()).apply();
+                Log.i("Danganronpa-Launch", "Local game installation complete");
+            }
+            refresh();
+            return;
+        }
+        if (request == PICK_DRIVER) {
+            if (result == RESULT_OK && data != null && data.getData() != null) importDriver(data.getData());
+            else showDrivers();
+            return;
+        }
+        if (result != RESULT_OK || data == null) return;
+        if (request == PICK_KEYS) {
+            onKeysPicked(data);
+            refresh();
+            return;
+        }
+        if (data.getData() == null) return;
+        if (request == PICK_GAME) {
+            onGamePicked(data.getData());
+            refresh();
+            return;
+        }
+        if (request == PICK_UPDATE) {
+            onUpdatePicked(data.getData());
+            refresh();
+            return;
+        }
+        if (request == PICK_CPK) {
+            importCpk(data.getData());
+            return;
+        }
+        if (request == PICK_ZIP || request == PICK_FOLDER) importSaves(request, data.getData());
+    }
+
+    boolean importingSaves;
+    void importSaves(int request, Uri uri) {
+        if (importingSaves) return;
+        importingSaves = true;
+        play.setEnabled(false);
+        status.setText("Importing saves...");
+        new Thread(() -> {
+            SaveFiles.Result imported = null;
+            String failure = null;
+            try {
+                imported = request == PICK_ZIP ? SaveFiles.importZip(getContentResolver(), uri)
+                    : SaveFiles.importTree(getContentResolver(), uri);
+            } catch (Exception e) { failure = String.valueOf(e.getMessage()); }
+            final SaveFiles.Result result = imported;
+            final String error = failure;
+            runOnUiThread(() -> {
+                importingSaves = false;
+                if (isFinishing() || isDestroyed()) return;
+                refresh();
+                if (error != null) tell("Import failed", error);
+                else if (result == null) tell("No saves found",
+                    "Choose the folder or ZIP containing the Danganronpa data0001.bin and data0001.binslot files. Include system.bin and system.binslot if they are in your backup.");
+                else tell("Saves imported", result.files + " files imported. Select Load Game in Danganronpa." +
+                    (result.backup == null ? "" : "\n\nPrevious saves backed up to: user/" + result.backup));
+            });
+        }, "Danganronpa-save-import").start();
+    }
+
+    private boolean importingDriver;
+    private DriverSelector driverSelector;
+
+    private void addDriverRow(LinearLayout root) {
+        addRow(root, t("Driver gráfico", "GPU driver"), t("Selecionar", "Select"), v -> showDrivers());
+    }
+
+    private void showDrivers() {
+        if (importingDriver) return;
+        if (driverSelector == null) driverSelector = new DriverSelector(this);
+        driverSelector.show();
+    }
+
+    private void importDriver(Uri uri) {
+        if (importingDriver) return;
+        importingDriver = true;
+        String name = displayName(uri);
+        Context app = getApplicationContext();
+        Toast.makeText(this, t("Importando driver…", "Importing driver…"), Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            try {
+                CustomDrivers.install(app, uri, name);
+                runOnUiThread(() -> finishDriverImport(null));
+            } catch (Exception e) {
+                String message = e.getMessage() == null ? e.toString() : e.getMessage();
+                runOnUiThread(() -> finishDriverImport(message));
+            }
+        }, "Danganronpa-driver-import").start();
+    }
+
+    private void finishDriverImport(String error) {
+        importingDriver = false;
+        if (isFinishing() || isDestroyed()) return;
+        if (error != null) {
+            new LauncherDialog.Builder(this).setTitle("Driver import failed").setMessage(error)
+                    .setPositiveButton("Back", (d, w) -> showDrivers()).show();
+        } else {
+            Toast.makeText(this, "Driver imported and selected.", Toast.LENGTH_SHORT).show();
+            showDrivers();
+        }
+    }
+
+    private boolean exportingLogs;
+
+    private void addLogsRow(LinearLayout root) {
+        addRow(root, "Logs", t("Exportar", "Export"), v -> exportLogs());
+    }
+
+    private void exportLogs() {
+        if (exportingLogs) return;
+        exportingLogs = true;
+        Context app = getApplicationContext();
+        Toast.makeText(this, t("Exportando logs…", "Exporting logs…"), Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            DiagnosticLogs.Exported exported = null;
+            String error = null;
+            try {
+                exported = DiagnosticLogs.export(app);
+            } catch (Exception e) {
+                error = String.valueOf(e.getMessage());
+            }
+            final DiagnosticLogs.Exported file = exported;
+            final String failure = error;
+            runOnUiThread(() -> {
+                exportingLogs = false;
+                if (isFinishing() || isDestroyed()) return;
+                if (failure != null) tell(t("Não foi possível exportar os logs", "Could not export logs"), failure);
+                else new LauncherDialog.Builder(this)
+                        .setTitle(t("Logs exportados", "Logs exported"))
+                        .setMessage(Lang.f("Salvos em Downloads/%s.", "Saved to Downloads/%s.", file.name))
+                        .setPositiveButton(t("Compartilhar", "Share"), (dialog, which) -> shareLogs(file))
+                        .setNegativeButton(t("Fechar", "Close"), null)
+                        .show();
+            });
+        }, "Danganronpa-log-export").start();
+    }
+
+    private void shareLogs(DiagnosticLogs.Exported file) {
+        Intent share = new Intent(Intent.ACTION_SEND)
+                .setType("text/plain")
+                .putExtra(Intent.EXTRA_STREAM, file.uri)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        share.setClipData(ClipData.newRawUri(file.name, file.uri));
+        startActivity(Intent.createChooser(share, t("Compartilhar logs", "Share logs")));
+    }
+
+    void exportSaves() {
+        try {
+            java.io.File out = SaveFiles.export();
+            // Listed at once by the file pickers and the Files app (written straight to disk, it would wait for a scan).
+            if (out != null) android.media.MediaScannerConnection.scanFile(this, new String[] {out.getPath()}, null, null);
+            if (out == null) tell(t("Nenhum save", "No saves"), t("Ainda não há saves.", "There are no saves yet."));
+            else tell(t("Saves exportados", "Saves exported"),
+                    Lang.f("Salvos em Downloads/%s. Use o botão Importar para restaurá-los.",
+                            "Saved to Download/%s. The Import button takes it back as is.", out.getName()));
+        } catch (Exception e) {
+            tell(t("Não foi possível exportar", "Export failed"), String.valueOf(e.getMessage()));
+        }
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int request, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(request, permissions, results);
+        if (request == 100) refresh();
+    }
+
+    void askAccess() {
+        if (Build.VERSION.SDK_INT < 30) {
+            requestPermissions(new String[] {android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                    android.Manifest.permission.WRITE_EXTERNAL_STORAGE}, 100);
+            return;
+        }
+        try {
+            startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                    Uri.parse("package:" + getPackageName())));
+        } catch (Exception e) {
+            startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+        }
+    }
+
+    // config.txt: KEY=value lines, in order.
+    static Map<String, String> readConfig(File f) {
+        Map<String, String> out = new LinkedHashMap<>();
+        if (!f.canRead()) return out;
+        try (BufferedReader r = new BufferedReader(new FileReader(f))) {
+            for (String line; (line = r.readLine()) != null; ) {
+                line = line.trim();
+                int eq = line.indexOf('=');
+                if (eq > 0) out.put(line.substring(0, eq), line.substring(eq + 1));
+            }
+        } catch (Exception ignored) {
+        }
+        return out;
+    }
+
+    static boolean writeConfig(File f, Map<String, String> config) {
+        File temp = null;
+        try {
+            temp = File.createTempFile("config-", ".tmp", f.getAbsoluteFile().getParentFile());
+            try (FileOutputStream stream = new FileOutputStream(temp);
+                 BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(stream, StandardCharsets.UTF_8))) {
+                for (Map.Entry<String, String> e : config.entrySet()) {
+                    writer.write(e.getKey() + "=" + e.getValue());
+                    writer.write('\n');
+                }
+                writer.flush();
+                stream.getFD().sync();
+            }
+            Files.move(temp.toPath(), f.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            return true;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (temp != null) temp.delete();
+        }
+    }
+
+    void load() {
+        config.clear();
+        config.putAll(readConfig(new File(dataDir(), "config.txt")));
+    }
+
+    static void putResolution(Map<String, String> target, String resolution) {
+        target.put("RESOLUTION", resolution);
+        if ("360p".equals(resolution) || "480p".equals(resolution)) {
+            String dimensions = "360p".equals(resolution) ? "640x360" : "854x480";
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", dimensions);
+            target.put("NX_RENDER_RES", dimensions);
+            target.put("NX_RES", resolution);
+        } else if ("1080p".equals(resolution)) {
+            target.put("NX_HANDHELD", "0");
+            target.put("resolution", "1920x1080");
+            target.put("NX_RENDER_RES", "1920x1080");
+            target.put("NX_RES", "1080p");
+        } else {
+            target.put("NX_HANDHELD", "1");
+            target.put("resolution", "1280x720");
+            target.put("NX_RENDER_RES", "1280x720");
+            target.put("NX_RES", "720p");
+        }
+    }
+
+    static void removeRetiredSettings(Map<String, String> settings) {
+        for (String key : new String[] {"RENDER_SCALE", "NX_ANISO_MAX", "NX_OVERLAY_FRAME_TIME", "language",
+                "GRAPHICS", "NX_FSR", "NX_HUD_1080", "NX_SHADOWS", "NX_MALI_LOW_SHADOWS", "NX_DISABLE_BLOOM",
+                "NX_VIBRATION", "NX_TOUCH_HIDE", "NX_PIPE_PREWARM", "NX_PIPE_PREWARM_LOAD", "NX_AFFINITY",
+                "NX_DANGANRONPA_MOTION_BLUR", "NX_LOD_BIAS"}) settings.remove(key);
+    }
+
+    boolean save() {
+        if (!hasAccess()) { askAccess(); return false; }
+        dataDir().mkdirs();
+        if (!dataDir().isDirectory()) {
+            tell(t("Erro", "Error"), t("Não foi possível abrir a pasta de configurações.", "Could not open the settings folder."));
+            return false;
+        }
+        load();
+        for (Option o : options) config.put(o.key, o.values[o.pick]);
+        putResolution(config, config.get("RESOLUTION"));
+        removeRetiredSettings(config);
+        if (writeConfig(new File(dataDir(), "config.txt"), config)) return true;
+        tell(t("Erro ao salvar", "Could not save"), t("Verifique o espaço livre e a permissão de armazenamento.",
+                "Check free space and storage permission."));
+        load();
+        for (Option o : options) o.select(config.get(o.key));
+        updateButtons(getWindow().getDecorView());
+        return false;
+    }
+
+    int dp(int v) { return Math.round(v * getResources().getDisplayMetrics().density); }
+
+    private boolean importingCpk;
+    private ModManager modManager;
+
+    private void addModsRow(LinearLayout root) {
+        addRow(root, t("Mods e traduções", "Mods and translations"), t("Gerenciar", "Manage"), v -> {
+            if (!hasAccess()) { askAccess(); return; }
+            if (importingCpk) return;
+            if (modManager == null) modManager = new ModManager(this);
+            modManager.show();
+        });
+    }
+
+    void importCpk(Uri uri) {
+        if (importingCpk) return;
+        String name = displayName(uri);
+        if (name == null || name.length() <= 4 || !name.toLowerCase(Locale.ROOT).endsWith(".cpk")
+                || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0 || name.indexOf('\0') >= 0) {
+            tell(t("Erro ao importar CPK", "Could not import CPK"),
+                    t("Selecione um arquivo .cpk com o nome original.",
+                            "Select a .cpk file with its original filename."));
+            return;
+        }
+        installCpk(uri, name);
+    }
+
+    private void installCpk(Uri uri, String target) {
+        if (importingCpk) return;
+        importingCpk = true;
+        Toast.makeText(this, t("Importando CPK…", "Importing CPK…"), Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            String error = null;
+            String installed = null;
+            try {
+                installed = copyCpk(uri, target);
+            } catch (Exception e) {
+                error = String.valueOf(e.getMessage());
+            }
+            final String failure = error;
+            final String installedPath = installed;
+            runOnUiThread(() -> {
+                importingCpk = false;
+                if (isFinishing() || isDestroyed()) return;
+                if (failure == null) {
+                    tell(t("CPK instalado", "CPK installed"), installedPath
+                            + (installedPath.startsWith("mods/_translation/")
+                                ? "\nEnable translation in Mods and translations to apply it."
+                                : t("\nSerá aplicado quando o jogo for aberto novamente.", "\nApplied the next time you open the game.")));
+                } else {
+                    tell(t("Erro ao importar CPK", "Could not import CPK"), failure);
+                }
+            });
+        }, "Danganronpa-cpk-import").start();
+    }
+
+    private String copyCpk(Uri uri, String target) throws IOException {
+        synchronized (ModFiles.class) {
+            // Preserve the original RomFS filename, including language archives such as data_e.cpk.
+            File romfs = ModFiles.translationRomfs(dataDir());
+            if (!romfs.isDirectory() && !romfs.mkdirs()) throw new IOException("Could not create the mod folder.");
+            File staged = File.createTempFile(".import-", ".tmp", romfs);
+            try {
+                InputStream stream = getContentResolver().openInputStream(uri);
+                if (stream == null) throw new IOException("Could not open the selected file.");
+                try (DataInputStream in = new DataInputStream(stream);
+                     FileOutputStream out = new FileOutputStream(staged)) {
+                    int magic = in.readInt();
+                    if (magic != 0x43504B20) throw new IOException("The selected file is not a CRI CPK archive.");
+                    out.write(new byte[] {'C', 'P', 'K', ' '});
+                    SaveFiles.copy(in, out);
+                    out.getFD().sync();
+                }
+                Files.move(staged.toPath(), new File(romfs, target).toPath(),
+                        StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+                return dataDir().toPath().relativize(new File(romfs, target).toPath()).toString().replace(File.separatorChar, '/');
+            } finally {
+                if (staged.exists() && !staged.delete()) Log.w("Danganronpa-Launch", "Could not remove staged CPK");
+            }
+        }
+    }
+
+    void addRow(LinearLayout root, String label, String button, View.OnClickListener click) {
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(0, dp(2), 0, dp(2));
+        TextView name = new TextView(this);
+        name.setText(label);
+        name.setTextColor(Color.WHITE);
+        name.setTextSize(16);
+        row.addView(name, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+        Button b = new Button(this);
+        LauncherTheme.button(b, false);
+        compactButton(b);
+        b.setAllCaps(false);
+        b.setMinWidth(dp(110));
+        b.setMaxWidth(dp(160));
+        b.setText(button);
+        b.setOnClickListener(click);
+        row.addView(b);
+        root.addView(row);
+    }
+
+    private void compactButton(Button button) {
+        button.setTextSize(13);
+        button.setMinHeight(dp(42));
+        button.setMinimumHeight(dp(42));
+        button.setPadding(dp(12), dp(6), dp(12), dp(6));
+    }
+
+    private void applySafeAreaInsets(View view) {
+        if (launcherLandscape()) return;
+        view.setOnApplyWindowInsetsListener((target, insets) -> {
+            int[] safe;
+            if (Build.VERSION.SDK_INT >= 30) {
+                safe = Api30Helper.safeArea(insets);
+            } else {
+                safe = new int[] {
+                        insets.getSystemWindowInsetLeft(), insets.getSystemWindowInsetTop(),
+                        insets.getSystemWindowInsetRight(), insets.getSystemWindowInsetBottom()
+                };
+            }
+            target.setPadding(safe[0], safe[1], safe[2], safe[3]);
+            return insets;
+        });
+        view.requestApplyInsets();
+    }
+}

@@ -482,18 +482,18 @@ void frame_draws(const ShaderInfo* vs, uint64_t count) {
 // Temporary, opt-in resolution trace. Distinct target/viewport/depth signatures per presented frame, not every
 // draw. Small post-processing targets are normal: compare the same scene pass across frames, not two passes
 // within one frame. g_frame is the host's presented-frame counter (it is not a guest command-buffer frame ID).
-void p4g_trace_resolution(const Targets& t, const VkViewport& vp) {
+void danganronpa_trace_resolution(const Targets& t, const VkViewport& vp) {
     static const bool on = [] {
-        const char* e = std::getenv("NX_P4G_TRACE_RES");
-        return e && std::strcmp(e, "1") == 0 && std::strcmp(game::kInfo.id, "p4g") == 0;
+        const char* e = std::getenv("NX_DANGANRONPA_TRACE_RES");
+        return e && std::strcmp(e, "1") == 0 && std::strcmp(game::kInfo.id, "danganronpa") == 0;
     }();
     if (!on) return;
     static const uint64_t from = [] {
-        const char* e = std::getenv("NX_P4G_TRACE_RES_FROM");
+        const char* e = std::getenv("NX_DANGANRONPA_TRACE_RES_FROM");
         return e ? std::strtoull(e, nullptr, 10) : 0ull;
     }();
     static const bool announced = [] {
-        log("p4g: resolution trace enabled from frame %llu for 300 presented frames; max 16 signatures/frame",
+        log("danganronpa: resolution trace enabled from frame %llu for 300 presented frames; max 16 signatures/frame",
             (unsigned long long)from);
         return true;
     }();
@@ -513,14 +513,14 @@ void p4g_trace_resolution(const Targets& t, const VkViewport& vp) {
         t.color_count};
     if (seen.find(key) != seen.end()) return;
     if (seen.size() >= 16) {
-        if (!truncated) log("p4g: resolution frame=%llu truncated (more than 16 signatures)", (unsigned long long)f);
+        if (!truncated) log("danganronpa: resolution frame=%llu truncated (more than 16 signatures)", (unsigned long long)f);
         truncated = true;
         return;
     }
     seen.insert(key);
     const Texture* color = t.color_count && t.colors[0] ? get<Texture>(t.colors[0]) : nullptr;
     const Texture* depth = t.depth ? get<Texture>(t.depth) : nullptr;
-    log("p4g: resolution frame=%llu pass=%llu c0=%llx logical=%ux%u mip=%u depth=%llx logical=%ux%u mip=%u "
+    log("danganronpa: resolution frame=%llu pass=%llu c0=%llx logical=%ux%u mip=%u depth=%llx logical=%ux%u mip=%u "
         "pass_extent=%ux%u guest_viewport_set=%u guest_viewport=(%d,%d,%d,%d) "
         "host_viewport=(%.1f,%.1f,%.1f,%.1f) depth_test=%u depth_write=%u depth_func=%u",
         (unsigned long long)f, (unsigned long long)g_pass_serial, (unsigned long long)t.colors[0],
@@ -586,14 +586,14 @@ bool live_ui_draw(const Targets& t) {
     return t0 && t0->width >= 1280 && t0->format == 0x25 && t.depth && g_state.depth.depth_test;
 }
 
-// P4G draw trace, frame 3601: the scene receives a 30-vertex additive overlay
+// DANGANRONPA draw trace, frame 3601: the scene receives a 30-vertex additive overlay
 // from a separate, full-size render target before it is composited with the HUD.
 // The same fragment shader also draws UI, so match the whole pass signature.
-bool p4g_motion_blur_skipped(const Targets& t, bool indexed, const Cmd& c,
+bool danganronpa_motion_blur_skipped(const Targets& t, bool indexed, const Cmd& c,
                              const ShaderInfo& vs, const ShaderInfo* fs) {
     static const bool off = [] {
-        const char* e = std::getenv("NX_P4G_MOTION_BLUR");
-        return e && std::strcmp(e, "0") == 0 && std::strcmp(game::kInfo.id, "p4g") == 0;
+        const char* e = std::getenv("NX_DANGANRONPA_MOTION_BLUR");
+        return e && std::strcmp(e, "0") == 0 && std::strcmp(game::kInfo.id, "danganronpa") == 0;
     }();
     if (!off || indexed || c.i[1] != 30 || !fs ||
         fs->hash != "7247e449c951a72f" || vs.hash != "547d293498cbedcf" ||
@@ -610,7 +610,7 @@ bool p4g_motion_blur_skipped(const Targets& t, bool indexed, const Cmd& c,
         src->format != 0x25 || dst->format != src->format ||
         src->width != dst->width || src->height != dst->height)
         return false;
-    static const bool logged = [] { log("p4g: motion blur experiment skipped the scene overlay"); return true; }();
+    static const bool logged = [] { log("danganronpa: motion blur experiment skipped the scene overlay"); return true; }();
     (void)logged;
     return true;
 }
@@ -658,7 +658,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     }
     // Textures first: an upload or a layout change cannot happen inside the render pass.
     uint32_t gathered = gather_textures(*shaders);
-    if (p4g_motion_blur_skipped(t, indexed, c, *vs, fs)) return false;
+    if (danganronpa_motion_blur_skipped(t, indexed, c, *vs, fs)) return false;
     {   // NX_DUMP_DRAW_TEXTURES=<fs hash>@<draw>: the images the first such draw samples, snapshotted (frames/00000_c00000NN)
         static const char* env = std::getenv("NX_DUMP_DRAW_TEXTURES");
         static int done_count = 0;
@@ -925,7 +925,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
         vp.x *= 0.75f, vp.y *= 0.75f, vp.width *= 0.75f, vp.height *= 0.75f;
         sc = {{sc.offset.x * 3 / 4, sc.offset.y * 3 / 4}, {sc.extent.width * 3 / 4, sc.extent.height * 3 / 4}};
     }
-    p4g_trace_resolution(tt, vp);
+    danganronpa_trace_resolution(tt, vp);
     const OriginViewport mapped = origin_viewport(lower_left, vp.y, vp.height);
     vp.y = mapped.y, vp.height = mapped.height;
 

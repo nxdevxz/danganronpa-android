@@ -137,14 +137,14 @@ void draw_command(VkCommandBuffer cb, const Cmd& c, const CmdList& list, const T
             static uint64_t reports = 0, types_seen = 0;
             if (c.n < 64 && !(types_seen >> c.n & 1)) types_seen |= 1ull << c.n, log("nvn: first counter report of type %u", c.n);
             if (uint8_t* p = const_cast<uint8_t*>(guest_bytes(c.a[0]))) {
-                // Experimental P4G default: do not report CPU replay latency as GPU work. Reports in one submit
-                // share its start time; this is synthetic timing, not a hardware GPU timestamp. P4G can opt out
+                // Experimental DANGANRONPA default: do not report CPU replay latency as GPU work. Reports in one submit
+                // share its start time; this is synthetic timing, not a hardware GPU timestamp. DANGANRONPA can opt out
                 // with NX_FAKE_GPU_TIME=0. Other games retain the original presence-based environment switch.
                 static const bool fake = [] {
                     const char* e = std::getenv("NX_FAKE_GPU_TIME");
-                    const bool p4g = std::strcmp(game::kInfo.id, "p4g") == 0;
-                    const bool on = p4g ? (!e || std::strcmp(e, "0") != 0) : e != nullptr;
-                    if (p4g) log("p4g: GPU counter timing=%s source=%s (experimental; not hardware GPU time)",
+                    const bool danganronpa = std::strcmp(game::kInfo.id, "danganronpa") == 0;
+                    const bool on = danganronpa ? (!e || std::strcmp(e, "0") != 0) : e != nullptr;
+                    if (danganronpa) log("danganronpa: GPU counter timing=%s source=%s (experimental; not hardware GPU time)",
                                  on ? "submit-start" : "host-replay", e ? "override" : "default");
                     return on;
                 }();

@@ -75,7 +75,7 @@ ServiceRegistrar r_lm("lm", [] {
                             ));
 
                             log(
-                                "p4g: GUEST ERROR: %.*s",
+                                "danganronpa: GUEST ERROR: %.*s",
                                 count,
                                 reinterpret_cast<const char*>(
                                     data + pos
@@ -159,7 +159,7 @@ ServiceRegistrar r_hid("hid", [] {
                     c.out_copy.push_back(handle);
 
                     log(
-                        "p4g: hid GetSharedMemoryHandle -> %u",
+                        "danganronpa: hid GetSharedMemoryHandle -> %u",
                         handle
                     );
 
@@ -168,7 +168,7 @@ ServiceRegistrar r_hid("hid", [] {
             });
 
             c.push_object(resource);
-            log("p4g: hid CreateAppletResource");
+            log("danganronpa: hid CreateAppletResource");
             return 0u;
         };
     });

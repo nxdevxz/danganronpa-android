@@ -7,7 +7,7 @@
 // it appears where the thumb lands, and pushed nearly all the way it also holds Y, so running needs no second thumb.
 //
 // Persona landscape layout: four face buttons in the Xbox diamond at the bottom right, shoulder buttons in the top
-// corners, - and + at the top centre, and the d-pad above the left stick. P4G's launcher editor has a copy of this
+// corners, - and + at the top centre, and the d-pad above the left stick. DANGANRONPA's launcher editor has a copy of this
 // table and can move every control, including the stick ring (NX_TOUCH_LAYOUT).
 //
 // Games without a layout here keep their own touch handling (Hades: zones around the thumb).
@@ -48,7 +48,7 @@ const Named kWonder[] = {
     {"MINUS", {0.455f, 0.07f, 0.040f, kMinus, touch_label(kGlyphMinus)}},
 };
 
-const Named kPersonaLandscape[] = {
+const Named kDanganronpaLandscape[] = {
     {"A", {0.940f, 0.66f, 0.068f, kA, touch_label(kGlyphA)}},
     {"B", {0.875f, 0.80f, 0.068f, kB, touch_label(kGlyphB)}},
     {"X", {0.875f, 0.52f, 0.068f, kX, touch_label(kGlyphX)}},
@@ -78,7 +78,7 @@ struct Layout {
 
 const Layout kLayouts[] = {
     {"wonder", kWonder, std::size(kWonder), false, kY, 0.15f, 0.72f},
-    {"p4g", kPersonaLandscape, std::size(kPersonaLandscape), true, 0, 0.15f, 0.76f},
+    {"danganronpa", kDanganronpaLandscape, std::size(kDanganronpaLandscape), true, 0, 0.15f, 0.76f},
 };
 
 const Layout* layout() {
@@ -125,11 +125,11 @@ const std::vector<TouchButton>& buttons() {
         std::vector<TouchButton> out;
         const Layout* l = layout();
         if (!l) return out;
-        const bool xbox = std::strcmp(l->game, "p4g") == 0;
+        const bool xbox = std::strcmp(l->game, "danganronpa") == 0;
         // Keep NX_TOUCH_LAYOUT keys tied to their original positions, so existing
         // Custom layouts retain their geometry. The source table starts with A, B, X, Y.
         constexpr size_t xbox_face[] = {1, 0, 3, 2};
-        // P4G editor visibility is resolved once, before either drawing or hit testing. Keep legacy position keys.
+        // DANGANRONPA editor visibility is resolved once, before either drawing or hit testing. Keep legacy position keys.
         const char* hidden_env = xbox ? std::getenv("NX_TOUCH_HIDDEN") : nullptr;
         const std::string hidden = hidden_env ? hidden_env : "";
         for (size_t k = 0; k < l->count; k++) {
@@ -147,7 +147,7 @@ const std::vector<TouchButton>& buttons() {
             TouchButton b = l->buttons[k].b;
             layout_entry(l->buttons[k].name, b.x, b.y, b.r);
             if (xbox && k < std::size(xbox_face)) {
-                const TouchButton& face = kPersonaLandscape[xbox_face[k]].b;
+                const TouchButton& face = kDanganronpaLandscape[xbox_face[k]].b;
                 b.button = face.button;
                 b.label = face.label;
             }

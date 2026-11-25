@@ -28,9 +28,9 @@ uint64_t g_sampling = 0;
 
 bool hid_trace_enabled() {
     static const bool requested = [] {
-        if (std::strcmp(game::kInfo.id, "p4g") != 0) return true;
-        const char* aggregate = std::getenv("NX_P4G_ANALOG_TRACE");
-        const char* detail = std::getenv("NX_P4G_STICK_TRACE");
+        if (std::strcmp(game::kInfo.id, "danganronpa") != 0) return true;
+        const char* aggregate = std::getenv("NX_DANGANRONPA_ANALOG_TRACE");
+        const char* detail = std::getenv("NX_DANGANRONPA_STICK_TRACE");
         const char* verbose = std::getenv("NX_VERBOSE_LOG");
         return (aggregate && aggregate[0] == '1') || (detail && detail[0] == '1') ||
                (verbose && verbose[0] == '1');
