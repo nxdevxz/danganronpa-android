@@ -48,8 +48,8 @@ struct SoftComponent {
 };
 std::mutex g_soft_lock;
 std::vector<SoftComponent> g_soft;
-uint64_t g_set_orig, g_get_orig, g_fill_orig;
-uint64_t g_set_thunk, g_get_thunk, g_fill_thunk;
+uint64_t g_set_orig, g_get_orig, g_fill_orig, g_event_orig, g_empty_orig;
+uint64_t g_set_thunk, g_get_thunk, g_fill_thunk, g_event_thunk, g_empty_thunk;
 std::atomic<unsigned> g_omx_log{0};
 
 SoftComponent* soft_find(uint64_t handle) {
@@ -202,6 +202,66 @@ void soft_fill_buffer_done(CPU& c) {
     call(c, g_fill_orig);
 }
 
+// OMX_ERRORTYPE EventHandler(OMX_HANDLETYPE, OMX_PTR, OMX_EVENTTYPE, OMX_U32, OMX_U32, OMX_PTR)
+void soft_event_handler(CPU& c) {
+    static std::atomic<unsigned> n{0};
+    if (n.fetch_add(1) < 60)
+        log("movie: OMX event %u (data %llx, %llx) from %llx", static_cast<unsigned>(c.x[2]),
+            static_cast<unsigned long long>(c.x[3] & 0xFFFFFFFFull), static_cast<unsigned long long>(c.x[4] & 0xFFFFFFFFull),
+            static_cast<unsigned long long>(c.x[0]));
+    call(c, g_event_orig);
+}
+
+// The decoder wants an Annex B byte stream (00 00 00 01 before every NAL). MP4 carries length-prefixed NALs and
+// the parameter sets without start codes; four-byte lengths are rewritten in place, a lone SPS/PPS gets a prefix.
+const char* to_annex_b(uint64_t header, uint8_t* d, uint32_t len) {
+    if (len >= 4 && d[0] == 0 && d[1] == 0 && d[2] == 0 && d[3] == 1) return "annex b";
+    if (len >= 3 && d[0] == 0 && d[1] == 0 && d[2] == 1) return "annex b (3)";
+    uint32_t pos = 0;
+    bool lengths = len > 4;
+    while (lengths && pos < len) {
+        if (pos + 4 > len) { lengths = false; break; }
+        const uint32_t n = (uint32_t(d[pos]) << 24) | (uint32_t(d[pos + 1]) << 16) | (uint32_t(d[pos + 2]) << 8) | d[pos + 3];
+        if (n == 0 || n > len - pos - 4) { lengths = false; break; }
+        pos += 4 + n;
+    }
+    if (lengths && pos == len) {
+        for (pos = 0; pos < len;) {
+            const uint32_t n = (uint32_t(d[pos]) << 24) | (uint32_t(d[pos + 1]) << 16) | (uint32_t(d[pos + 2]) << 8) | d[pos + 3];
+            d[pos] = d[pos + 1] = d[pos + 2] = 0, d[pos + 3] = 1;
+            pos += 4 + n;
+        }
+        return "length-prefixed -> annex b";
+    }
+    const uint32_t type = len ? (d[0] & 0x1f) : 0;
+    const uint32_t room = field<uint32_t>(header, 16) - field<uint32_t>(header, 24);
+    if ((type == 7 || type == 8) && len + 4 <= room) {
+        std::memmove(d + 4, d, len);
+        d[0] = d[1] = d[2] = 0, d[3] = 1;
+        field<uint32_t>(header, 20) = len + 4;
+        return "parameter set + start code";
+    }
+    return "unknown layout";
+}
+
+// OMX_ERRORTYPE EmptyThisBuffer(OMX_HANDLETYPE, OMX_BUFFERHEADERTYPE*)
+void soft_empty_this_buffer(CPU& c) {
+    const uint64_t header = c.x[1];
+    static std::atomic<unsigned> n{0};
+    if (header && field<uint32_t>(header, 104) == 0) {
+        auto* d = reinterpret_cast<uint8_t*>(field<uint64_t>(header, 8) + field<uint32_t>(header, 24));
+        const uint32_t len = field<uint32_t>(header, 20), flags = field<uint32_t>(header, 96);
+        const unsigned k = n.fetch_add(1);
+        char hex[64] = "";
+        for (uint32_t i = 0; i < len && i < 16; i++) std::snprintf(hex + 3 * i, sizeof hex - 3 * i, "%02x ", d[i]);
+        const char* how = len ? to_annex_b(header, d, len) : "empty";
+        if (k < 14 || k % 200 == 0)
+            log("movie: H.264 input #%u: %u bytes, flags 0x%x, pts %lld us, starts %s-> %s", k, len, flags,
+                static_cast<long long>(field<int64_t>(header, 88)), hex, how);
+    }
+    call(c, g_empty_orig);
+}
+
 void open_movie_component(CPU& c) {
     const char* name = reinterpret_cast<const char*>(c.x[1]);
     char requested[96] = "(null)";
@@ -218,8 +278,9 @@ void open_movie_component(CPU& c) {
             auto* copy = new uint64_t[3];
             for (int k = 0; k < 3; k++) copy[k] = reinterpret_cast<uint64_t*>(table)[k];
             if (!g_fill_thunk) g_fill_thunk = hle_address_or("danganronpa_omx_fill_buffer_done", soft_fill_buffer_done);
-            g_fill_orig = copy[2];
-            copy[2] = g_fill_thunk;
+            if (!g_event_thunk) g_event_thunk = hle_address_or("danganronpa_omx_event", soft_event_handler);
+            g_fill_orig = copy[2], g_event_orig = copy[0];
+            copy[2] = g_fill_thunk, copy[0] = g_event_thunk;
             c.x[2] = reinterpret_cast<uint64_t>(copy);
         }
     }
@@ -231,6 +292,7 @@ void open_movie_component(CPU& c) {
         if (!g_set_thunk) {
             g_get_thunk = hle_address_or("danganronpa_omx_get_parameter", soft_get_parameter);
             g_set_thunk = hle_address_or("danganronpa_omx_set_parameter", soft_set_parameter);
+            g_empty_thunk = hle_address_or("danganronpa_omx_empty_this_buffer", soft_empty_this_buffer);
         }
         {
             std::lock_guard lk(g_soft_lock);
@@ -239,6 +301,7 @@ void open_movie_component(CPU& c) {
         }
         if (tbl[5] != g_get_thunk) g_get_orig = tbl[5], tbl[5] = g_get_thunk;
         if (tbl[6] != g_set_thunk) g_set_orig = tbl[6], tbl[6] = g_set_thunk;
+        if (tbl[15] != g_empty_thunk) g_empty_orig = tbl[15], tbl[15] = g_empty_thunk;  // EmptyThisBuffer +120
     }
     log("movie: OMX component '%s'%s -> result %d (0x%x), component %llx",
         requested, swap ? " (software swap)" : "", result, static_cast<unsigned>(result),
