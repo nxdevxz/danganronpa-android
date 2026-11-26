@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cstdio>
 #include <array>
+#include <algorithm>
 #include <atomic>
 #include <utility>
 #include <mutex>
@@ -58,36 +59,78 @@ SoftComponent* soft_find(uint64_t handle) {
 
 template <class T> T& field(uint64_t base, size_t off) { return *reinterpret_cast<T*>(base + off); }
 
+// The component's own idea of a port definition (what GetParameter would answer), read on a scratch copy.
+bool soft_query(CPU& c, uint64_t handle, uint32_t index, uint64_t params, uint8_t* scratch, size_t cap) {
+    const size_t size = std::min<size_t>(field<uint32_t>(params, 0), cap);
+    if (size < 96) return false;
+    std::memcpy(scratch, reinterpret_cast<void*>(params), size);
+    const uint64_t s0 = c.x[0], s1 = c.x[1], s2 = c.x[2];
+    c.x[0] = handle, c.x[1] = index, c.x[2] = reinterpret_cast<uint64_t>(scratch);
+    call(c, g_get_orig);
+    const bool ok = static_cast<uint32_t>(c.x[0]) == 0;
+    c.x[0] = s0, c.x[1] = s1, c.x[2] = s2;
+    return ok;
+}
+
 // OMX_ERRORTYPE SetParameter(OMX_HANDLETYPE, OMX_INDEXTYPE, OMX_PTR)
 void soft_set_parameter(CPU& c) {
     const uint64_t handle = c.x[0], params = c.x[2];
     const uint32_t index = static_cast<uint32_t>(c.x[1]);
-    uint64_t patched = 0;
-    uint32_t before = 0;
+    uint64_t patched = 0, count_at = 0;
+    uint32_t before = 0, count_before = 0, port = 0, actual = 0, min_count = 0, size = 0;
+    int32_t width = 0, height = 0;
+    bool is_definition = false;
     if (params) {
-        std::lock_guard lk(g_soft_lock);
-        if (SoftComponent* k = soft_find(handle)) {
-            if (index == kIndexPortFormat && field<uint32_t>(params, 8) == 1 &&
-                field<uint32_t>(params, 20) != kColorI420) {
-                patched = params + 20;
-            } else if (index == kIndexPortDefinition && field<uint32_t>(params, 8) == 1 &&
-                       field<uint32_t>(params, 36) == 1 && field<uint32_t>(params, 88) != kColorI420) {
-                patched = params + 88;
+        bool known;
+        {
+            std::lock_guard lk(g_soft_lock);
+            known = soft_find(handle) != nullptr;
+        }
+        if (known) {
+            if (index == kIndexPortDefinition && field<uint32_t>(params, 36) == 1) {
+                is_definition = true;
+                port = field<uint32_t>(params, 8), actual = field<uint32_t>(params, 16);
+                min_count = field<uint32_t>(params, 20), size = field<uint32_t>(params, 24);
+                width = field<int32_t>(params, 56), height = field<int32_t>(params, 60);
+                // The software decoder refuses (OMX_ErrorUnsupportedSetting) fewer buffers than it needs.
+                uint8_t scratch[256];
+                if (soft_query(c, handle, index, params, scratch, sizeof scratch))
+                    min_count = std::max(min_count, field<uint32_t>(reinterpret_cast<uint64_t>(scratch), 20));
+                if (actual < min_count) {
+                    count_at = params + 16, count_before = actual;
+                    *reinterpret_cast<uint32_t*>(count_at) = min_count;
+                }
             }
-            if (patched) {
-                before = *reinterpret_cast<uint32_t*>(patched);
-                k->want_color = before;
-                *reinterpret_cast<uint32_t*>(patched) = kColorI420;
+            std::lock_guard lk(g_soft_lock);
+            if (SoftComponent* k = soft_find(handle)) {
+                if (index == kIndexPortFormat && field<uint32_t>(params, 8) == 1 &&
+                    field<uint32_t>(params, 20) != kColorI420) {
+                    patched = params + 20;
+                } else if (is_definition && port == 1 && field<uint32_t>(params, 88) != kColorI420) {
+                    patched = params + 88;
+                }
+                if (patched) {
+                    before = *reinterpret_cast<uint32_t*>(patched);
+                    k->want_color = before;
+                    *reinterpret_cast<uint32_t*>(patched) = kColorI420;
+                }
             }
         }
     }
     call(c, g_set_orig);
     const uint32_t result = static_cast<uint32_t>(c.x[0]);
     if (patched) *reinterpret_cast<uint32_t*>(patched) = before;
-    if (g_omx_log.fetch_add(1) < 80)
-        log("movie: OMX SetParameter(%llx, index 0x%x)%s -> 0x%x", static_cast<unsigned long long>(handle), index,
-            patched ? " [colour format changed to I420]" : "", result);
-    if (patched) log("movie: OMX output colour format 0x%x requested, I420 set instead", before);
+    if (count_at) *reinterpret_cast<uint32_t*>(count_at) = count_before;
+    static std::atomic<unsigned> errors{0};
+    if (g_omx_log.fetch_add(1) < 80 || (result != 0 && errors.fetch_add(1) < 40)) {
+        if (is_definition)
+            log("movie: OMX SetParameter(%llx, port definition) port %u: %dx%d buffers %u (decoder needs %u%s), size %u%s -> 0x%x",
+                static_cast<unsigned long long>(handle), port, width, height, actual,
+                min_count, count_at ? ", raised" : "", size, patched ? ", colour -> I420" : "", result);
+        else
+            log("movie: OMX SetParameter(%llx, index 0x%x)%s -> 0x%x", static_cast<unsigned long long>(handle), index,
+                patched ? " [colour format changed to I420]" : "", result);
+    }
 }
 
 // OMX_ERRORTYPE GetParameter(OMX_HANDLETYPE, OMX_INDEXTYPE, OMX_PTR)
