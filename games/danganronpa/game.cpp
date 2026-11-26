@@ -4,6 +4,7 @@
 #include <nx/runtime.h>
 #include <cstdlib>
 #include <cstring>
+#include <cstdio>
 
 namespace nx {
 
@@ -23,17 +24,33 @@ const game::Info game::kInfo = {
 namespace {
 uint64_t original_stream_open;
 uint64_t original_component_open;
+uint64_t original_decoder_ctor;
 
 void open_movie_component(CPU& c) {
     const char* name = reinterpret_cast<const char*>(c.x[1]);
-    if (name && std::strcmp(name, "OMX.Nvidia.h264.decode") == 0) {
+    char requested[96] = "(null)";
+    if (name) std::snprintf(requested, sizeof requested, "%s", name);
+    const uint64_t out = c.x[4];
+    const bool swap = name && std::strcmp(name, "OMX.Nvidia.h264.decode") == 0;
+    if (swap) {
         static const char software[] = "OMX.google.h264.decoder";
         c.x[1] = reinterpret_cast<uint64_t>(software);
         log("movie: selecting software H.264 decoder");
     }
     call(c, original_component_open);
+    const int32_t result = static_cast<int32_t>(c.x[0]);
+    const uint64_t component = (result == 0 && out) ? *reinterpret_cast<uint64_t*>(out) : 0;
+    log("movie: OMX component '%s'%s -> result %d (0x%x), component %llx",
+        requested, swap ? " (software swap)" : "", result, static_cast<unsigned>(result),
+        static_cast<unsigned long long>(component));
 }
 
+void open_movie_decoder(CPU& c) {
+    log("movie: Decoder ctor type %d format %d mode %d priority %d",
+        static_cast<int>(c.x[1]), static_cast<int>(c.x[2]),
+        static_cast<int>(c.x[3]), static_cast<int>(c.x[4]));
+    call(c, original_decoder_ctor);
+}
 
 void open_local_movie_stream(CPU& c) {
     // CreateCacheConfig mode 0 selects the guest's synchronous FileSource.
@@ -56,6 +73,9 @@ void game::after_init() {
     const auto open_stream = find_symbol("_ZN7android16NuMediaExtractor19setDataSourceStreamEPN5movie18ClientStreamReaderEPKci");
     if (open_stream) original_stream_open = hook_function(open_stream, open_local_movie_stream);
     log("movie: direct local stream reader %s", original_stream_open ? "enabled" : "unavailable");
+    const auto decoder = find_symbol("_ZN5movie7DecoderC1ENS_11DecoderTypeENS_19DecoderOutputFormatENS_11DecoderModeEi");
+    if (decoder) original_decoder_ctor = hook_function(decoder, open_movie_decoder);
+    log("movie: decoder trace %s", original_decoder_ctor ? "enabled" : "unavailable");
     // The US release ships English and Japanese text.
     default_setting("NX_GAME_LANGUAGES", "en-us ja");
     // Capture a bounded startup draw trace when the player enables diagnostics.
