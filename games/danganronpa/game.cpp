@@ -24,6 +24,8 @@ void game::after_init() {
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
+    // The US release ships English and Japanese text.
+    default_setting("NX_GAME_LANGUAGES", "en-us ja");
     // Capture a bounded startup draw trace when the player enables diagnostics.
     if (const char* trace = std::getenv("NX_TRACE_PERF"); trace && trace[0] == '1') {
         default_setting("NX_TRACE_DRAWS", "0");
