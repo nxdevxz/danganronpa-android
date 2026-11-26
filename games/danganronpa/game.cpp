@@ -3,6 +3,8 @@
 #include "profile.h"
 #include <nx/runtime.h>
 #include <cstdlib>
+#include <atomic>
+#include <cstring>
 
 namespace nx {
 
@@ -18,12 +20,33 @@ const game::Info game::kInfo = {
     danganronpa::profile::usa_program_id
 };
 
+#if defined(__ANDROID__)
+namespace {
+uint64_t original_sniff;
+std::atomic<bool> rejected{false};
+
+void probe_opening_movie(CPU& c) {
+    if (!rejected.exchange(true)) {
+        log("movie probe: rejecting first stream before format detection");
+        c.x[0] = 0;  // DataSource::sniff returns bool.
+        return;
+    }
+    call(c, original_sniff);
+}
+}
+#endif
+
 void game::after_init() {
 
 #if defined(__ANDROID__)
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
+    if (const char* flag = std::getenv("NX_PROBE_OPENING_MOVIE"); flag && std::strcmp(flag, "1") == 0) {
+        const auto addr = find_symbol("_ZN7android10DataSource5sniffEPNS_7String8EPfPNS_2spINS_8AMessageEEE");
+        if (addr) original_sniff = hook_function(addr, probe_opening_movie);
+        log("movie probe: %s", original_sniff ? "armed" : "stream detector unavailable");
+    }
     // The US release ships English and Japanese text.
     default_setting("NX_GAME_LANGUAGES", "en-us ja");
     // Capture a bounded startup draw trace when the player enables diagnostics.
