@@ -28,9 +28,10 @@ extern const nx::ModuleInfo nx_module_sdk;
 
 namespace nx {
 
-// The game's two modules: the recompiled ones, or (native execution) the NSOs of the player's exefs.
+// Native execution also initializes optional libraries from the player's ExeFS.
 static const ModuleInfo* g_main = nullptr;
 static const ModuleInfo* g_sdk = nullptr;
+static std::vector<const ModuleInfo*> g_subsdks;
 
 uint64_t mrs(CPU& c, uint32_t sysreg) {
     switch (sysreg) {
@@ -62,7 +63,7 @@ void msr(CPU& c, uint32_t sysreg, uint64_t value) {
 // a TLS allocator (SetMemoryAllocatorForThreadLocal, in nninitStartup), so rtld's initializer callback does nothing
 // and the modules are initialized right before nnMain, SDK first. Static TLS itself comes from the kernel
 // (kernel.cpp: a block per thread at TLS region +0x1F0, where nn::os loads TPIDR_EL0 from).
-constexpr uint64_t kDtInit = 0x30;
+
 
 static void call_preserving(CPU& c, uint64_t target) {
     uint64_t saved[13];
@@ -76,7 +77,7 @@ static void call_preserving(CPU& c, uint64_t target) {
 // that load.
 static uint64_t init_status_addr(const ModuleInfo& m) {
     uint64_t page[32] = {};
-    for (uint64_t pc = m.base + kDtInit; pc < m.base + kDtInit + 0x40; pc += 4) {
+    for (uint64_t pc = m.base + m.dt_init; pc + 4 <= std::min<uint64_t>(m.base + m.dt_init + 0x40, m.base + m.text + m.text_size); pc += 4) {
         uint32_t w = ld<uint32_t>(pc);
         if ((w & 0x9F000000) == 0x90000000) {  // adrp
             int64_t imm = int64_t(((w >> 5) & 0x7FFFF) << 2 | ((w >> 29) & 3)) << 43 >> 31;  // sign-extended << 12
@@ -85,15 +86,16 @@ static uint64_t init_status_addr(const ModuleInfo& m) {
             return page[(w >> 5) & 31] + ((w >> 10) & 0xFFF) * 4;
         }
     }
-    fatal("%s: DT_INIT does not load its init status as expected", m.name);
+    return 0;
 }
 
 // DT_INIT hands __nnmusl_init_dso the module's layout: consecutive GOT slots it loads with adrp + ldr. Slots 13
 // and 14 are the start and end of the module's .tdata (checked on SDK 16: Wonder's main 0x359cc18..0x359cc28,
 // sdk empty). Returns false when the pattern is not there (SDK 9 modules have no .tdata to worry about).
 static bool tdata_range(const ModuleInfo& m, uint64_t& start, uint64_t& end) {
+    if (!m.dt_init) return false;
     uint64_t page[32] = {}, lo = ~0ull, hi = 0;
-    for (uint64_t pc = m.base + kDtInit; pc < m.base + kDtInit + 0x100; pc += 4) {
+    for (uint64_t pc = m.base + m.dt_init; pc + 4 <= std::min<uint64_t>(m.base + m.dt_init + 0x100, m.base + m.text + m.text_size); pc += 4) {
         uint32_t w = ld<uint32_t>(pc);
         if ((w & 0x9F000000) == 0x90000000) {  // adrp
             int64_t imm = int64_t(((w >> 5) & 0x7FFFF) << 2 | ((w >> 29) & 3)) << 43 >> 31;
@@ -109,11 +111,20 @@ static bool tdata_range(const ModuleInfo& m, uint64_t& start, uint64_t& end) {
 }
 
 static void init_module(CPU& c, const ModuleInfo& m) {
-    call_preserving(c, m.base + kDtInit);
-    uint32_t status = ld<uint32_t>(init_status_addr(m));
-    if (status == 1)
-        for (size_t k = 0; k < m.init_count; k++) call_preserving(c, m.base + m.init_array[k]);
-    log("%s constructors: %zu", m.name, status == 1 ? m.init_count : 0);
+    if (m.dt_init) {
+        uint64_t status = init_status_addr(m);
+        call_preserving(c, m.base + m.dt_init);
+        // The SDK startup routine may already have invoked its own array.
+        if (status && ld<uint32_t>(status) != 1) {
+            log("%s: constructors handled by DT_INIT", m.name);
+            return;
+        }
+    }
+    for (size_t k = 0; k < m.init_count; ++k) {
+        uint64_t offset = m.init_array[k];
+        if (offset && offset != UINT64_MAX) call_preserving(c, m.base + offset);
+    }
+    log("%s constructors: %zu", m.name, m.init_count);
 }
 
 static void rtld_init(CPU&) {}
@@ -124,6 +135,7 @@ static void rtld_mark(CPU&) {}
 // set up by now, so they run here, right before the real nnMain.
 static void nn_main(CPU& c) {
     init_module(c, *g_sdk);
+    for (const ModuleInfo* module : g_subsdks) init_module(c, *module);
     init_module(c, *g_main);
     game::after_init();
     log("entering nnMain");
@@ -216,7 +228,7 @@ void boot() {
             }
         }
     }
-    if (nso.size() < 2) fatal("failed to load base modules (main and sdk required)");
+    if (nso.size() < 2 || nso[0]->name != "main" || nso[1]->name != "sdk") fatal("failed to load base modules (main and sdk required)");
 
     
     // Refuse unknown executable revisions before applying any game-specific assumptions.
@@ -244,6 +256,7 @@ void boot() {
     std::vector<const ModuleInfo*> mods;
     std::vector<const uint8_t*> img_ptrs;
     for (const auto& m : nso) {
+        if (m->name.starts_with("subsdk")) g_subsdks.push_back(&m->info);
         mods.push_back(&m->info);
         img_ptrs.push_back(m->image.data());
     }

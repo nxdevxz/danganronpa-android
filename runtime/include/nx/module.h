@@ -44,6 +44,7 @@ struct ModuleInfo {
     size_t init_count;
     const uint64_t* fini_array;
     size_t fini_count;
+    uint64_t dt_init = 0x30;  // Generated modules use the SDK layout. NSOs supply their DT_INIT offset.
 };
 
 constexpr uint32_t R_AARCH64_ABS64 = 257;

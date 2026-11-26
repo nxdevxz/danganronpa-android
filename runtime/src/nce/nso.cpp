@@ -11,7 +11,7 @@ namespace nx::nce {
 namespace {
 
 constexpr int64_t DT_NULL = 0, DT_PLTRELSZ = 2, DT_STRTAB = 5, DT_SYMTAB = 6, DT_RELA = 7, DT_RELASZ = 8,
-                  DT_SYMENT = 11, DT_JMPREL = 23, DT_INIT_ARRAY = 25, DT_FINI_ARRAY = 26, DT_INIT_ARRAYSZ = 27,
+                  DT_SYMENT = 11, DT_INIT = 12, DT_JMPREL = 23, DT_INIT_ARRAY = 25, DT_FINI_ARRAY = 26, DT_INIT_ARRAYSZ = 27,
                   DT_FINI_ARRAYSZ = 28;
 
 template <typename T>
@@ -144,6 +144,12 @@ std::unique_ptr<NsoModule> load_nso_bytes(const std::vector<uint8_t>& raw, const
     }
     if (!dyn.count(DT_STRTAB) || !dyn.count(DT_SYMTAB)) {
         error = path + ": no symbol table";
+        return nullptr;
+    }
+    mi.dt_init = dyn.count(DT_INIT) ? dyn[DT_INIT] : 0;
+    if (mi.dt_init && ((mi.dt_init & 3) || mi.dt_init < mi.text ||
+                       mi.dt_init + 3 < mi.dt_init || mi.dt_init + 3 >= mi.text + mi.text_size)) {
+        error = path + ": DT_INIT outside executable text";
         return nullptr;
     }
     const uint64_t strtab = dyn[DT_STRTAB], symtab = dyn[DT_SYMTAB];
