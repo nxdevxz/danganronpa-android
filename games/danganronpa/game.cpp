@@ -3,8 +3,6 @@
 #include "profile.h"
 #include <nx/runtime.h>
 #include <cstdlib>
-#include <atomic>
-#include <cstring>
 
 namespace nx {
 
@@ -22,16 +20,13 @@ const game::Info game::kInfo = {
 
 #if defined(__ANDROID__)
 namespace {
-uint64_t original_sniff;
-std::atomic<bool> rejected{false};
+uint64_t original_stream_open;
 
-void probe_opening_movie(CPU& c) {
-    if (!rejected.exchange(true)) {
-        log("movie probe: rejecting first stream before format detection");
-        c.x[0] = 0;  // DataSource::sniff returns bool.
-        return;
-    }
-    call(c, original_sniff);
+void open_local_movie_stream(CPU& c) {
+    // CreateCacheConfig mode 0 selects the guest's synchronous FileSource.
+    c.x[3] = 0;
+    call(c, original_stream_open);
+    log("movie: direct stream open returned %d", static_cast<int32_t>(c.x[0]));
 }
 }
 #endif
@@ -42,11 +37,9 @@ void game::after_init() {
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
-    if (const char* flag = std::getenv("NX_PROBE_OPENING_MOVIE"); flag && std::strcmp(flag, "1") == 0) {
-        const auto addr = find_symbol("_ZN7android10DataSource5sniffEPNS_7String8EPfPNS_2spINS_8AMessageEEE");
-        if (addr) original_sniff = hook_function(addr, probe_opening_movie);
-        log("movie probe: %s", original_sniff ? "armed" : "stream detector unavailable");
-    }
+    const auto open_stream = find_symbol("_ZN7android16NuMediaExtractor19setDataSourceStreamEPN5movie18ClientStreamReaderEPKci");
+    if (open_stream) original_stream_open = hook_function(open_stream, open_local_movie_stream);
+    log("movie: direct local stream reader %s", original_stream_open ? "enabled" : "unavailable");
     // The US release ships English and Japanese text.
     default_setting("NX_GAME_LANGUAGES", "en-us ja");
     // Capture a bounded startup draw trace when the player enables diagnostics.
