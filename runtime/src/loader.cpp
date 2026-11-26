@@ -649,7 +649,12 @@ void load_modules(
             }
 
             const Symbol& s = mi->symbols[r.sym];
-            uint64_t target = s.module_relative ? lm.base + s.value : 0;
+            // The movie library embeds its own FDK AAC implementation and
+            // allocator. SDK exports with the same names use a different heap.
+            // Keep its strong definitions together, including codec tables.
+            const bool own_definition = std::strcmp(mi->name, "subsdk0") == 0 &&
+                !s.imported && s.bind == 1 && s.name[0];
+            uint64_t target = (s.module_relative || own_definition) ? lm.base + s.value : 0;
 
             if (!target && (s.type == 2 || s.imported)) {
                 if (
