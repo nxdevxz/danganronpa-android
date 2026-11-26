@@ -468,8 +468,12 @@ static bool recompiled_only(const char* name) {
 #if NX_NCE
     // The native extractor passes MediaData directly to its decoder. Resolve
     // the whole movie API together so both sides see the same object layout.
-    if ((std::strncmp(name, "_ZN5movie", 9) == 0 ||
-         std::strncmp(name, "_ZNK5movie", 10) == 0) &&
+    // The codec also imports SDK VectorImpl, whose storage uses the NVIDIA
+    // heap. Let the SDK register the game's graphics allocation callbacks.
+    const bool native_movie_import = std::strncmp(name, "_ZN5movie", 9) == 0 ||
+        std::strncmp(name, "_ZNK5movie", 10) == 0 ||
+        std::strcmp(name, "_ZN2nv20SetGraphicsAllocatorEPFPvmmS0_EPFvS0_S0_EPFS0_S0_mS0_ES0_") == 0;
+    if (native_movie_import &&
         find_symbol("_ZN5movie9Extractor13SetDataSourceEPNS_18ClientStreamReaderEPKc") &&
         find_symbol(name))
         return true;
