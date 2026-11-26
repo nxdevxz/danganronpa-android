@@ -145,14 +145,20 @@ void InitializeAudioOutParameter(CPU& c) {  // {u32 sample_rate; u16 channels; u
     st<uint16_t>(c.x[0] + 6, 0);
 }
 
-void OpenDefaultAudioOut(CPU& c) {  // (AudioOut*, os::SystemEvent*, const AudioOutParameter&)
-    log("audio: diagnostic build queue-state-v2");
-    uint64_t out = c.x[0], sysev = c.x[1];
-    {
-        const uint32_t rate = ld<uint32_t>(c.x[2]), ch = ld<uint16_t>(c.x[2] + 4);
-        g_out.channels = ch ? ch : 2;
-        log("audio: OpenDefaultAudioOut: requested %u Hz, %u channels (0 = default) -> %u", rate, ch, g_out.channels);
+constexpr char kAudioOutName[] = "DeviceOut";
+
+void ListAudioOuts(CPU& c) {
+    if (!c.x[0] || static_cast<int32_t>(c.x[1]) <= 0) {
+        c.x[0] = 0;
+        return;
     }
+    char* name = reinterpret_cast<char*>(c.x[0]);
+    std::memset(name, 0, 256);  // One AudioOutInfo entry.
+    std::memcpy(name, kAudioOutName, sizeof(kAudioOutName));
+    c.x[0] = 1;
+}
+
+void attach_audio_event(CPU& c, uint64_t sysev) {
     // Give the guest a system event backed by our kernel event: nn::os::AttachSystemEvent(type, read, managed,
     // write, managed, clear mode = manual).
     auto w = std::make_shared<KEvent>();
@@ -170,10 +176,33 @@ void OpenDefaultAudioOut(CPU& c) {  // (AudioOut*, os::SystemEvent*, const Audio
     c.x[5] = 1;  // manual clear
     call(c, attach);
     for (int k = 0; k < 8; k++) c.x[k] = saved[k];
+}
+
+void open_audio_out(CPU& c, uint64_t parameter, uint64_t sysev) {
+    const uint64_t out = c.x[0];
+    const uint32_t rate = ld<uint32_t>(parameter);
+    const uint32_t ch = ld<uint16_t>(parameter + 4);
+    {
+        std::lock_guard lk(g_out.lock);
+        g_out.channels = ch ? ch : 2;
+        log("audio: OpenAudioOut: requested %u Hz, %u channels -> %u", rate, ch, g_out.channels);
+    }
+    if (sysev) attach_audio_event(c, sysev);
     st<uint64_t>(out, 0xA0D10);  // opaque
     static std::once_flag once;
     std::call_once(once, [] { std::thread(player).detach(); });
     c.x[0] = 0;
+}
+
+void OpenDefaultAudioOutWithEvent(CPU& c) { open_audio_out(c, c.x[2], c.x[1]); }
+void OpenDefaultAudioOut(CPU& c) { open_audio_out(c, c.x[1], 0); }
+void OpenNamedAudioOut(CPU& c) {
+    const char* name = reinterpret_cast<const char*>(c.x[1]);
+    if (!name || (*name && std::strncmp(name, kAudioOutName, sizeof(kAudioOutName)) != 0)) {
+        c.x[0] = (1u << 9) | 153u;
+        return;
+    }
+    open_audio_out(c, c.x[2], 0);
 }
 
 void StartAudioOut(CPU& c) {
@@ -248,8 +277,7 @@ void GetAudioOutChannelCount(CPU& c) {
 void GetAudioOutSampleFormat(CPU& c) { c.x[0] = 2; }
 void GetAudioOutBufferDataSize(CPU& c) { c.x[0] = ld<uint64_t>(c.x[0] + 16); }
 void GetAudioOutName(CPU& c) {
-    static const char kName[] = "DeviceOut";
-    c.x[0] = reinterpret_cast<uint64_t>(kName);
+    c.x[0] = reinterpret_cast<uint64_t>(kAudioOutName);
 }
 
 void ListAudioIns(CPU& c) { c.x[0] = 0; }
@@ -627,7 +655,10 @@ NX_HLE("_ZN2nn5audio30GetActiveAudioOutputDeviceNameEPNS0_15AudioDeviceNameE", G
 NX_HLE("_ZN2nn5audio26SetAudioDeviceOutputVolumeEPKNS0_15AudioDeviceNameEf", zero);
 NX_HLE("_ZN2nn5audio41GetActiveAudioDeviceChannelCountForOutputEv", two);
 NX_HLE("_ZN2nn5audio27InitializeAudioOutParameterEPNS0_17AudioOutParameterE", InitializeAudioOutParameter);
-NX_HLE("_ZN2nn5audio19OpenDefaultAudioOutEPNS0_8AudioOutEPNS_2os11SystemEventERKNS0_17AudioOutParameterE", OpenDefaultAudioOut);
+NX_HLE("_ZN2nn5audio19OpenDefaultAudioOutEPNS0_8AudioOutEPNS_2os11SystemEventERKNS0_17AudioOutParameterE", OpenDefaultAudioOutWithEvent);
+NX_HLE("_ZN2nn5audio19OpenDefaultAudioOutEPNS0_8AudioOutERKNS0_17AudioOutParameterE", OpenDefaultAudioOut);
+NX_HLE("_ZN2nn5audio12OpenAudioOutEPNS0_8AudioOutEPKcRKNS0_17AudioOutParameterE", OpenNamedAudioOut);
+NX_HLE("_ZN2nn5audio13ListAudioOutsEPNS0_12AudioOutInfoEi", ListAudioOuts);
 NX_HLE("_ZN2nn5audio13StartAudioOutEPNS0_8AudioOutE", StartAudioOut);
 NX_HLE("_ZN2nn5audio16GetAudioOutStateEPKNS0_8AudioOutE", GetAudioOutState);
 NX_HLE("_ZN2nn5audio12StopAudioOutEPNS0_8AudioOutE", StopAudioOut);
