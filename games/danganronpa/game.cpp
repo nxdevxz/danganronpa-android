@@ -3,6 +3,7 @@
 #include "profile.h"
 #include <nx/runtime.h>
 #include <cstdlib>
+#include <cstring>
 
 namespace nx {
 
@@ -21,6 +22,18 @@ const game::Info game::kInfo = {
 #if defined(__ANDROID__)
 namespace {
 uint64_t original_stream_open;
+uint64_t original_component_open;
+
+void open_movie_component(CPU& c) {
+    const char* name = reinterpret_cast<const char*>(c.x[1]);
+    if (name && std::strcmp(name, "OMX.Nvidia.h264.decode") == 0) {
+        static const char software[] = "OMX.google.h264.decoder";
+        c.x[1] = reinterpret_cast<uint64_t>(software);
+        log("movie: selecting software H.264 decoder");
+    }
+    call(c, original_component_open);
+}
+
 
 void open_local_movie_stream(CPU& c) {
     // CreateCacheConfig mode 0 selects the guest's synchronous FileSource.
@@ -37,6 +50,9 @@ void game::after_init() {
     auto default_setting = [](const char* name, const char* value) {
         if (!std::getenv(name)) setenv(name, value, 0);
     };
+    const auto component = find_symbol("_ZN7android9OMXMaster21makeComponentInstanceEPKcPK16OMX_CALLBACKTYPEPvPP17OMX_COMPONENTTYPE");
+    if (component) original_component_open = hook_function(component, open_movie_component);
+    log("movie: software H.264 selection %s", original_component_open ? "enabled" : "unavailable");
     const auto open_stream = find_symbol("_ZN7android16NuMediaExtractor19setDataSourceStreamEPN5movie18ClientStreamReaderEPKci");
     if (open_stream) original_stream_open = hook_function(open_stream, open_local_movie_stream);
     log("movie: direct local stream reader %s", original_stream_open ? "enabled" : "unavailable");
