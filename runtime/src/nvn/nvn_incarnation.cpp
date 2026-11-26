@@ -61,7 +61,10 @@ Object* find_object(uint64_t guest, uint64_t mark) {
     for (auto& [epoch, object] : h->second)
         if (epoch > mark) {  // the first change after the mark retired what the replay must see
             // Created after the mark (null then) and before the replay: the object the lists mean (DEBUG.md #64).
-            if (!object && !mark_empty_old()) return current;
+            // A temporary texture can be created and finalized before the replay
+            // reaches its copy. Continue to the retirement of that first
+            // incarnation, even if the address has since been reused.
+            if (!object && !mark_empty_old()) continue;
             if (object != current) {
                 uint64_t n = g_resolved_old.fetch_add(1, std::memory_order_relaxed) + 1;
                 if (n == 1 || n == 100 || n % 10000 == 0)
