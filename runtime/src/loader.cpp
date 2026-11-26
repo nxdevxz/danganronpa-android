@@ -466,6 +466,14 @@ uint64_t find_symbol(const char* name) {
 
 static bool recompiled_only(const char* name) {
 #if NX_NCE
+    // The native extractor passes MediaData directly to its decoder. Resolve
+    // the whole movie API together so both sides see the same object layout.
+    if ((std::strncmp(name, "_ZN5movie", 9) == 0 ||
+         std::strncmp(name, "_ZNK5movie", 10) == 0) &&
+        find_symbol("_ZN5movie9Extractor13SetDataSourceEPNS_18ClientStreamReaderEPKc") &&
+        find_symbol(name))
+        return true;
+
     static const char* const kNames[] = {
         "longjmp",
         "_longjmp",
