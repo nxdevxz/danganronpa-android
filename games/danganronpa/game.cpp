@@ -5,6 +5,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdio>
+#include <array>
+#include <atomic>
+#include <utility>
 
 namespace nx {
 
@@ -45,11 +48,71 @@ void open_movie_component(CPU& c) {
         static_cast<unsigned long long>(component));
 }
 
+// ---- movie::Decoder trace -------------------------------------------------------------------------------
+// The game drives subsdk0's own movie::Decoder. Its vtable slots (same order as the P5R HLE) are hooked once,
+// after the first construction, so the log shows how far the video gets and what each call returns.
+constexpr int kSlots = 19;
+const char* const kSlotName[kSlots] = {
+    "~Decoder", "~Decoder(deleting)", "Configure", "RegisterClientEvents", "GetOutputFormat", "Start", "Stop",
+    "Reset", "Flush", "AcquireInputBufferIndex", "GetInputBuffer", "SendInputBufferForDecode",
+    "AcquireOutputBufferIndex", "GetOutputBuffer", "GetOutputBufferSize", "ReleaseOutputBufferIndex",
+    "GetLastError", "GetOutputBuffer(format)", "GetOutputBufferFormat"};
+uint64_t g_slot_original[kSlots];
+std::atomic<unsigned> g_slot_count[kSlots];
+
+template <int N>
+void trace_decoder_slot(CPU& c) {
+    const uint64_t self = c.x[0], a1 = c.x[1], a2 = c.x[2], a3 = c.x[3], a4 = c.x[4], a5 = c.x[5];
+    call(c, g_slot_original[N]);
+    const int32_t result = static_cast<int32_t>(c.x[0]);
+    const unsigned n = g_slot_count[N].fetch_add(1, std::memory_order_relaxed);
+    if (n >= 30 && n % 300 != 0) return;
+    char extra[160] = "";
+    if (result == 0) {
+        if (N == 9 && a1 && a2)
+            std::snprintf(extra, sizeof extra, " [index %d more %d]",
+                          *reinterpret_cast<int32_t*>(a1), *reinterpret_cast<int32_t*>(a2));
+        if (N == 12 && a1 && a2 && a3 && a4)
+            std::snprintf(extra, sizeof extra, " [index %d pts %lld flags %x more %d]",
+                          *reinterpret_cast<int32_t*>(a1), static_cast<long long>(*reinterpret_cast<int64_t*>(a2)),
+                          *reinterpret_cast<uint32_t*>(a3), *reinterpret_cast<int32_t*>(a4));
+        if (N == 14 && a1 && a2)
+            std::snprintf(extra, sizeof extra, " [size %d %d]",
+                          *reinterpret_cast<int32_t*>(a1), *reinterpret_cast<int32_t*>(a2));
+    }
+    log("movie: Decoder %llx ::%s(%llx, %llx, %llx, %llx, %llx) #%u -> %d (0x%x)%s",
+        static_cast<unsigned long long>(self), kSlotName[N], static_cast<unsigned long long>(a1),
+        static_cast<unsigned long long>(a2), static_cast<unsigned long long>(a3),
+        static_cast<unsigned long long>(a4), static_cast<unsigned long long>(a5), n, result,
+        static_cast<unsigned>(result), extra);
+}
+
+template <int... I>
+constexpr std::array<HleFn, sizeof...(I)> make_trace(std::integer_sequence<int, I...>) {
+    return {{trace_decoder_slot<I>...}};
+}
+const std::array<HleFn, kSlots> kTrace = make_trace(std::make_integer_sequence<int, kSlots>{});
+
 void open_movie_decoder(CPU& c) {
-    log("movie: Decoder ctor type %d format %d mode %d priority %d",
-        static_cast<int>(c.x[1]), static_cast<int>(c.x[2]),
-        static_cast<int>(c.x[3]), static_cast<int>(c.x[4]));
+    const uint64_t self = c.x[0];
+    log("movie: Decoder ctor type %d format %d mode %d priority %d (object %llx)",
+        static_cast<int>(c.x[1]), static_cast<int>(c.x[2]), static_cast<int>(c.x[3]),
+        static_cast<int>(c.x[4]), static_cast<unsigned long long>(self));
     call(c, original_decoder_ctor);
+    static std::atomic<bool> hooked{false};
+    const uint64_t vtable = self ? *reinterpret_cast<uint64_t*>(self) : 0;
+    if (vtable && !hooked.exchange(true)) {
+        int ok = 0;
+        for (int k = 2; k < kSlots; k++) {
+            const uint64_t entry = *reinterpret_cast<uint64_t*>(vtable + 8u * k);
+            g_slot_original[k] = entry ? hook_function(entry, kTrace[k]) : 0;
+            if (g_slot_original[k]) ok++;
+            else log("movie: Decoder slot %d (%s) at %llx not hooked", k, kSlotName[k],
+                     static_cast<unsigned long long>(entry));
+        }
+        log("movie: Decoder vtable %llx traced (%d of %d slots)", static_cast<unsigned long long>(vtable),
+            ok, kSlots - 2);
+    }
 }
 
 void open_local_movie_stream(CPU& c) {
