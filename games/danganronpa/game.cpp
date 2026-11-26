@@ -8,6 +8,8 @@
 #include <array>
 #include <atomic>
 #include <utility>
+#include <mutex>
+#include <vector>
 
 namespace nx {
 
@@ -29,6 +31,134 @@ uint64_t original_stream_open;
 uint64_t original_component_open;
 uint64_t original_decoder_ctor;
 
+// ---- Software H.264 decoder: colour format bridge ----------------------------------------------------------
+// The game's movie::Decoder asks the H.264 component for NV12. Google's software decoder only offers planar
+// I420 and answers OMX_ErrorUnsupportedSetting (Decoder::Configure -> 0x1006), so nothing is ever decoded.
+// The component is wrapped: a non-I420 output colour format is replaced by I420 in SetParameter, the caller is
+// still told the format it asked for in GetParameter, and every decoded picture is turned into NV12 in place
+// before the client's FillBufferDone sees it.
+constexpr uint32_t kIndexPortDefinition = 0x02000001, kIndexPortFormat = 0x06000001;
+constexpr uint32_t kColorI420 = 19;
+
+struct SoftComponent {
+    uint64_t handle = 0;
+    uint32_t want_color = 0;       // what the client tried to set on the output port
+    int32_t width = 0, height = 0, stride = 0, slice = 0;  // the output port as the decoder reports it
+};
+std::mutex g_soft_lock;
+std::vector<SoftComponent> g_soft;
+uint64_t g_set_orig, g_get_orig, g_fill_orig;
+uint64_t g_set_thunk, g_get_thunk, g_fill_thunk;
+std::atomic<unsigned> g_omx_log{0};
+
+SoftComponent* soft_find(uint64_t handle) {
+    for (auto& k : g_soft) if (k.handle == handle) return &k;
+    return nullptr;
+}
+
+template <class T> T& field(uint64_t base, size_t off) { return *reinterpret_cast<T*>(base + off); }
+
+// OMX_ERRORTYPE SetParameter(OMX_HANDLETYPE, OMX_INDEXTYPE, OMX_PTR)
+void soft_set_parameter(CPU& c) {
+    const uint64_t handle = c.x[0], params = c.x[2];
+    const uint32_t index = static_cast<uint32_t>(c.x[1]);
+    uint64_t patched = 0;
+    uint32_t before = 0;
+    if (params) {
+        std::lock_guard lk(g_soft_lock);
+        if (SoftComponent* k = soft_find(handle)) {
+            if (index == kIndexPortFormat && field<uint32_t>(params, 8) == 1 &&
+                field<uint32_t>(params, 20) != kColorI420) {
+                patched = params + 20;
+            } else if (index == kIndexPortDefinition && field<uint32_t>(params, 8) == 1 &&
+                       field<uint32_t>(params, 36) == 1 && field<uint32_t>(params, 88) != kColorI420) {
+                patched = params + 88;
+            }
+            if (patched) {
+                before = *reinterpret_cast<uint32_t*>(patched);
+                k->want_color = before;
+                *reinterpret_cast<uint32_t*>(patched) = kColorI420;
+            }
+        }
+    }
+    call(c, g_set_orig);
+    const uint32_t result = static_cast<uint32_t>(c.x[0]);
+    if (patched) *reinterpret_cast<uint32_t*>(patched) = before;
+    if (g_omx_log.fetch_add(1) < 80)
+        log("movie: OMX SetParameter(%llx, index 0x%x)%s -> 0x%x", static_cast<unsigned long long>(handle), index,
+            patched ? " [colour format changed to I420]" : "", result);
+    if (patched) log("movie: OMX output colour format 0x%x requested, I420 set instead", before);
+}
+
+// OMX_ERRORTYPE GetParameter(OMX_HANDLETYPE, OMX_INDEXTYPE, OMX_PTR)
+void soft_get_parameter(CPU& c) {
+    const uint64_t handle = c.x[0], params = c.x[2];
+    const uint32_t index = static_cast<uint32_t>(c.x[1]);
+    call(c, g_get_orig);
+    const uint32_t result = static_cast<uint32_t>(c.x[0]);
+    if (result == 0 && params) {
+        std::lock_guard lk(g_soft_lock);
+        if (SoftComponent* k = soft_find(handle)) {
+            if (index == kIndexPortFormat && field<uint32_t>(params, 8) == 1 && k->want_color)
+                field<uint32_t>(params, 20) = k->want_color;
+            if (index == kIndexPortDefinition && field<uint32_t>(params, 8) == 1 &&
+                field<uint32_t>(params, 36) == 1) {
+                k->width = field<int32_t>(params, 56), k->height = field<int32_t>(params, 60);
+                k->stride = field<int32_t>(params, 64), k->slice = field<int32_t>(params, 68);
+                if (k->want_color) field<uint32_t>(params, 88) = k->want_color;
+                static std::atomic<unsigned> said{0};
+                if (said.fetch_add(1) < 12)
+                    log("movie: OMX output port %dx%d stride %d slice %d buffer %u", k->width, k->height, k->stride,
+                        k->slice, field<uint32_t>(params, 24));
+            }
+        }
+    }
+    if (g_omx_log.fetch_add(1) < 80)
+        log("movie: OMX GetParameter(%llx, index 0x%x) -> 0x%x", static_cast<unsigned long long>(handle), index, result);
+}
+
+// Planar I420 in one buffer to NV12 in the same buffer (stride x slice luma, then the chroma).
+void i420_to_nv12(uint8_t* p, int stride, int slice) {
+    const size_t y = size_t(stride) * slice, half = size_t(stride) / 2, rows = size_t(slice) / 2;
+    static thread_local std::vector<uint8_t> tmp;
+    tmp.assign(p + y, p + y + half * rows * 2);
+    const uint8_t* u = tmp.data();
+    const uint8_t* v = u + half * rows;
+    uint8_t* d = p + y;
+    for (size_t r = 0; r < rows; r++)
+        for (size_t x = 0; x < half; x++) {
+            d[r * stride + 2 * x] = u[r * half + x];
+            d[r * stride + 2 * x + 1] = v[r * half + x];
+        }
+}
+
+// OMX_ERRORTYPE FillBufferDone(OMX_HANDLETYPE, OMX_PTR, OMX_BUFFERHEADERTYPE*)
+void soft_fill_buffer_done(CPU& c) {
+    const uint64_t handle = c.x[0], header = c.x[2];
+    static std::atomic<unsigned> frames{0};
+    if (header && field<uint32_t>(header, 100) == 1) {
+        const uint32_t filled = field<uint32_t>(header, 20), offset = field<uint32_t>(header, 24);
+        const uint64_t buffer = field<uint64_t>(header, 8);
+        int stride = 0, slice = 0;
+        {
+            std::lock_guard lk(g_soft_lock);
+            if (SoftComponent* k = soft_find(handle)) {
+                stride = k->stride > 0 ? k->stride : k->width;
+                slice = k->slice > 0 ? k->slice : k->height;
+            }
+        }
+        const unsigned n = frames.fetch_add(1);
+        const bool fits = stride > 0 && slice > 0 && (stride % 2) == 0 && (slice % 2) == 0 &&
+                          filled == static_cast<uint32_t>(stride) * slice * 3 / 2;
+        if (n < 8 || n % 120 == 0)
+            log("movie: decoded picture #%u: %u bytes at +%u, pts %lld us, flags 0x%x, layout %dx%d %s", n, filled,
+                offset, static_cast<long long>(field<int64_t>(header, 88)), field<uint32_t>(header, 96), stride,
+                slice, fits ? "-> NV12" : "NOT converted");
+        if (fits && buffer) i420_to_nv12(reinterpret_cast<uint8_t*>(buffer + offset), stride, slice);
+    }
+    call(c, g_fill_orig);
+}
+
 void open_movie_component(CPU& c) {
     const char* name = reinterpret_cast<const char*>(c.x[1]);
     char requested[96] = "(null)";
@@ -39,10 +169,34 @@ void open_movie_component(CPU& c) {
         static const char software[] = "OMX.google.h264.decoder";
         c.x[1] = reinterpret_cast<uint64_t>(software);
         log("movie: selecting software H.264 decoder");
+        // The client's FillBufferDone gets wrapped, through a private copy of the callback table.
+        const uint64_t table = c.x[2];
+        if (table) {
+            auto* copy = new uint64_t[3];
+            for (int k = 0; k < 3; k++) copy[k] = reinterpret_cast<uint64_t*>(table)[k];
+            if (!g_fill_thunk) g_fill_thunk = hle_address_or("danganronpa_omx_fill_buffer_done", soft_fill_buffer_done);
+            g_fill_orig = copy[2];
+            copy[2] = g_fill_thunk;
+            c.x[2] = reinterpret_cast<uint64_t>(copy);
+        }
     }
     call(c, original_component_open);
     const int32_t result = static_cast<int32_t>(c.x[0]);
     const uint64_t component = (result == 0 && out) ? *reinterpret_cast<uint64_t*>(out) : 0;
+    if (swap && component) {
+        auto* tbl = reinterpret_cast<uint64_t*>(component);  // OMX_COMPONENTTYPE: GetParameter +40, SetParameter +48
+        if (!g_set_thunk) {
+            g_get_thunk = hle_address_or("danganronpa_omx_get_parameter", soft_get_parameter);
+            g_set_thunk = hle_address_or("danganronpa_omx_set_parameter", soft_set_parameter);
+        }
+        {
+            std::lock_guard lk(g_soft_lock);
+            if (!soft_find(component)) g_soft.push_back({component});
+            else *soft_find(component) = SoftComponent{component};
+        }
+        if (tbl[5] != g_get_thunk) g_get_orig = tbl[5], tbl[5] = g_get_thunk;
+        if (tbl[6] != g_set_thunk) g_set_orig = tbl[6], tbl[6] = g_set_thunk;
+    }
     log("movie: OMX component '%s'%s -> result %d (0x%x), component %llx",
         requested, swap ? " (software swap)" : "", result, static_cast<unsigned>(result),
         static_cast<unsigned long long>(component));
