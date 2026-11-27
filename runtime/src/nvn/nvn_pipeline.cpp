@@ -1059,8 +1059,16 @@ void apply_texel_writes(VkCommandBuffer cb, Texture& t, GpuImage& img) {
     VkImageLayout back = img.layout;
     transition(cb, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
     bool is3d = img.view_type == VK_IMAGE_VIEW_TYPE_3D;
-    for (const auto& w : writes) {
-        if (w.level >= img.levels) continue;
+    for (auto& w : writes) {
+        {   // diagnostic: first applications of CPU-written texels (text strips, glyph caches)
+            static int applied = 0;
+            if (applied++ < 40)
+                log("nvn/diag: apply texels tex fmt %#x %ux%u img %ux%u levels %u: write level %u %ux%u at %u,%u z %u d %u (%zu bytes)",
+                    t.format, t.width, t.height, img.width, img.height, img.levels, w.level, w.w, w.h, w.x, w.y, w.z, w.d,
+                    w.data.size());
+        }
+        // A level past the image's (the view's base level can be stale) was dropped: the text never appeared.
+        if (w.level >= img.levels) w.level = img.levels - 1;
         // The staged bytes are still in the guest's format (BC/ASTC blocks, R8, R11G11B10...); the image may be a host
         // format (decoded RGBA on Mali), so convert like CopyBufferToTexture does. Raw copy only if that is unknown.
         {
