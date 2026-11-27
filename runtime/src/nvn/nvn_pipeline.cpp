@@ -1055,7 +1055,10 @@ void apply_texel_writes(VkCommandBuffer cb, Texture& t, GpuImage& img) {
         t.has_writes.store(false, std::memory_order_release);
     }
     if (writes.empty()) return;
+    img.texels = true;
     VkImageLayout back = img.layout;
+    transition(cb, img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+    bool is3d = img.view_type == VK_IMAGE_VIEW_TYPE_3D;
     for (auto& w : writes) {
         {   // diagnostic: first applications of CPU-written texels (text strips, glyph caches)
             static int applied = 0;
@@ -1066,18 +1069,22 @@ void apply_texel_writes(VkCommandBuffer cb, Texture& t, GpuImage& img) {
         }
         // A level past the image's (the view's base level can be stale) was dropped: the text never appeared.
         if (w.level >= img.levels) w.level = img.levels - 1;
-        // Convert guest-format bytes to the host image format. A failed conversion
-        // must not fall back to copying compressed blocks into a decoded image.
-        const int32_t region[6] = {int32_t(w.x), int32_t(w.y), int32_t(w.z),
-                                   int32_t(w.w), int32_t(w.h), int32_t(w.d)};
-        if (upload_region(cb, t, img, w.level, 0, region, w.data.data())) {
-            img.texels = true;
-        } else {
-            static unsigned failed = 0;
-            if (failed++ < 5)
-                log("nvn: WriteTexels upload failed: format %#x host %u level %u %ux%ux%u",
-                    t.format, unsigned(img.format), w.level, w.w, w.h, w.d);
+        // The staged bytes are still in the guest's format (BC/ASTC blocks, R8, R11G11B10...); the image may be a host
+        // format (decoded RGBA on Mali), so convert like CopyBufferToTexture does. Raw copy only if that is unknown.
+        {
+            const int32_t region[6] = {int32_t(w.x), int32_t(w.y), int32_t(w.z), int32_t(w.w), int32_t(w.h), int32_t(w.d)};
+            if (upload_region(cb, t, img, w.level, 0, region, w.data.data())) continue;
         }
+        Upload u = upload(w.data.data(), w.data.size(), 16);
+        VkBufferImageCopy r{};
+        r.bufferOffset = u.offset;
+        r.imageSubresource = {img.aspect == (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)
+                                  ? VkImageAspectFlags(VK_IMAGE_ASPECT_DEPTH_BIT)
+                                  : img.aspect,
+                              w.level, is3d ? 0 : std::min(w.z, img.layers - 1), is3d ? 1 : std::min(w.d, img.layers)};
+        r.imageOffset = {int32_t(w.x), int32_t(w.y), is3d ? int32_t(w.z) : 0};
+        r.imageExtent = {w.w, w.h, is3d ? w.d : 1};
+        p_vkCmdCopyBufferToImage(cb, u.buffer, img.image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
     }
     if (back != VK_IMAGE_LAYOUT_UNDEFINED) transition(cb, img, back);
 }
@@ -1085,6 +1092,8 @@ void apply_texel_writes(VkCommandBuffer cb, Texture& t, GpuImage& img) {
 uint64_t g_submit_serial = 0;
 
 void pipeline_begin_submit() {
+    static const bool marker = [] { log("nvn/diag: BUILD fix4 (texel writes via upload_region, proxy routing without depth)"); return true; }();
+    (void)marker;
     g_submit_serial++;
     pipeline_warm_step();
 }
