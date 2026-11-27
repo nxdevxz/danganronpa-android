@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "platform.h"
+#include "kernel.h"
 
 #if !defined(__aarch64__)
 #error "NX_NCE runs the game's AArch64 code natively: AArch64 hosts only"
@@ -479,6 +480,7 @@ std::vector<SvcSite> g_svc_sites;  // every module's, made before any guest code
 
 constexpr uint32_t kMaxHooks = 4096;
 HleFn g_hooks[kMaxHooks];
+uint64_t g_hook_sites[kMaxHooks];
 std::atomic<uint32_t> g_hook_count{0};
 
 // The counter: guest ticks = (CNTVCT * mul) >> 32, minus an offset that lines them up with plat::monotonic_ns().
@@ -698,6 +700,7 @@ void prepare_module(const LoadedModule& m) {
 }
 
 void enter(CPU& c, uint64_t target) {
+    guest_checkpoint(c, target);
     Block* b = block();
     CPU* prev = b->ctx;
     b->ctx = &c;
@@ -745,6 +748,7 @@ uint64_t hook(uint64_t addr, HleFn fn) {
         fatal("nce: failed to restore execute access to hook pool at %llx", (unsigned long long)r.base);
     clear_cache(from, r.cur - from);
     g_hooks[index] = fn;
+    g_hook_sites[index] = addr;
     g_hook_count.store(index + 1);
     const uint32_t branch = b_to(addr, stub);
     write_code(addr, &branch, 4);
@@ -778,9 +782,13 @@ extern "C" void nce_dispatch(uint64_t tp, uint32_t code) {
         const SvcSite& s = g_svc_sites[code & 0xFFFF];
         svc(c, s.imm, s.pc);
     } else if (code & 0x40000000u) {
+        guest_checkpoint(c, g_hook_sites[code & 0xFFFF]);
         g_hooks[code & 0xFFFF](c);
+        guest_checkpoint(c, c.x[30]);
     } else {
+        guest_checkpoint(c, kThunkBase + uint64_t(code) * 16);
         hle_invoke(c, code);
+        guest_checkpoint(c, c.x[30]);
     }
     refresh(b);
 }

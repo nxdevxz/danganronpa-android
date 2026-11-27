@@ -62,5 +62,8 @@ jobs:
             runtime/src/platform_android_input.cpp runtime/src/hle_hid.cpp runtime/src/svc_misc.cpp \
             runtime/src/nvn/nvn_{buffer_cache,draw,frames,image,pipeline,pipeline_cache,present,queue,upload,vk}.cpp \
             runtime/src/vk_swapchain.cpp
+          "$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++" --target=aarch64-linux-android29 \
+            -std=c++20 -DNX_NCE=1 -fsyntax-only -I runtime/include -I runtime/src \
+            games/danganronpa/game.cpp runtime/src/kernel.cpp runtime/src/nce/nce.cpp
           "$ndk/shader-tools/linux-x86_64/glslc" -O --target-env=vulkan1.0 \
             tools/shaders/present/overlay.frag -o "$RUNNER_TEMP/overlay.spv"

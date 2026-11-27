@@ -10,6 +10,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <tuple>
 #include <unordered_map>
 #include <vector>
@@ -479,6 +480,89 @@ static void log_exit_context(const CPU& c, uint64_t pc) {
 }
 #endif
 
+// A waiting syscall can sleep indefinitely. Publish a stable copy before entering
+// one and gate its return to guest code. Running threads park at their next SVC.
+class ThreadCheckpoint {
+    KThread* t;
+    bool waiting;
+    std::optional<CPU> saved;
+public:
+    ThreadCheckpoint(CPU& regs, uint64_t pc, uint32_t svc) : t(t_self),
+        waiting(svc == 0x0b || svc == 0x18 || svc == 0x1a || svc == 0x1c || svc == 0x34) {
+        if (!t || (!waiting && !t->pause_requested.load())) return;
+        std::unique_lock lk(t->activity_lock);
+        if (waiting) saved.emplace(regs);
+        t->parked_regs = waiting ? &*saved : &regs;
+        t->parked_pc = pc;
+        t->in_wait_svc = waiting;
+        t->activity_cv.notify_all();
+        t->activity_cv.wait(lk, [&] { return !t->pause_requested.load(); });
+        if (!waiting) t->parked_regs = nullptr;
+    }
+    ~ThreadCheckpoint() {
+        if (!t || !waiting) return;
+        std::unique_lock lk(t->activity_lock);
+        t->activity_cv.wait(lk, [&] { return !t->pause_requested.load(); });
+        t->parked_regs = nullptr;
+    }
+};
+
+void guest_checkpoint(CPU& regs, uint64_t pc) {
+    if (t_self && t_self->pause_requested.load())
+        ThreadCheckpoint checkpoint(regs, pc, 0);
+}
+
+static uint32_t thread_activity(uint32_t handle, uint32_t paused) {
+    if (paused > 1) return 0xf001;
+    auto t = std::dynamic_pointer_cast<KThread>(handle_get(handle));
+    if (!t) return 0xe401;
+    if (t.get() == t_self) return 0xe401;
+    std::unique_lock lk(t->activity_lock);
+    if (bool(paused) == t->pause_requested.load()) return 0xfa01;
+    t->pause_requested = paused != 0;
+    t->activity_cv.notify_all();
+    if (paused && !t->activity_cv.wait_for(lk, std::chrono::milliseconds(25),
+            [&] { return t->parked_regs || !t->pause_requested.load(); })) {
+        // A thread still in native code cannot be inspected safely.
+        static std::atomic_flag reported = ATOMIC_FLAG_INIT;
+        if (!reported.test_and_set()) log("kernel: thread %x did not reach a suspension point", handle);
+        t->pause_requested = false;
+        t->activity_cv.notify_all();
+        return 0xea01;
+    }
+    return paused && !t->pause_requested.load() ? 0xfa01 : 0;
+}
+
+static uint32_t thread_context(uint64_t dst, uint32_t handle) {
+    auto t = std::dynamic_pointer_cast<KThread>(handle_get(handle));
+    if (!t) return 0xe401;
+    struct GuestContext {
+        uint64_t x[32], pc;
+        uint32_t psr, padding;
+        V128 v[32];
+        uint32_t fpcr, fpsr;
+        uint64_t tpidr;
+    } out{};
+    static_assert(sizeof(out) == 0x320 && offsetof(GuestContext, v) == 0x110);
+    const auto region = vm_query(dst);
+    if (!(region.perm & 2) || dst < region.addr || region.size < sizeof(out) ||
+        dst - region.addr > region.size - sizeof(out)) return 0xe601;
+    std::lock_guard lk(t->activity_lock);
+    if (!t->pause_requested || !t->parked_regs) return 0xfa01;
+    const CPU& c = *t->parked_regs;
+    unsigned first = t->in_wait_svc ? 19 : 0;
+    std::copy(c.x + first, c.x + 32, out.x + first);
+    out.pc = t->parked_pc;
+    out.psr = (uint32_t(c.nf) << 31) | (uint32_t(c.zf) << 30) |
+              (uint32_t(c.cf) << 29) | (uint32_t(c.vf) << 28);
+    std::memcpy(out.v, c.v, sizeof(out.v));
+    out.fpcr = uint32_t(c.fpcr);
+    out.fpsr = uint32_t(c.fpsr);
+    out.tpidr = c.tpidr;
+    std::memcpy(reinterpret_cast<void*>(dst), &out, sizeof(out));
+    return 0;
+}
+
 static void svc_impl(CPU& c, uint32_t imm, uint64_t pc) {
     if (g_trace) log("svc %#x from %s", imm, describe(pc).c_str());
     uint32_t rc = 0;
@@ -712,6 +796,12 @@ static void svc_impl(CPU& c, uint32_t imm, uint64_t pc) {
             decommit(c.x[0], c.x[1]);
             vm_set(c.x[0], c.x[1], c.x[0] - kAliasBase < kAliasSize ? kMemFree : kMemInaccessible, 0);
             break;
+        case 0x32:  // SetThreadActivity
+            rc = thread_activity(uint32_t(c.x[0]), uint32_t(c.x[1]));
+            break;
+        case 0x33:  // GetThreadContext3
+            rc = thread_context(c.x[0], uint32_t(c.x[1]));
+            break;
         case 0x34:
             rc = svc_wait_for_address(c.x[0], uint32_t(c.x[1]), int32_t(c.x[2]), int64_t(c.x[3]));
             break;
@@ -778,6 +868,7 @@ void svc_profile_report(uint64_t frames, int role) {
 }
 
 void svc(CPU& c, uint32_t imm, uint64_t pc) {
+    ThreadCheckpoint checkpoint(c, pc, imm);
     if (!t_svc_role || !svc_profile_on()) return svc_impl(c, imm, pc);
     uint64_t t0 = plat::monotonic_ns();
     svc_impl(c, imm, pc);

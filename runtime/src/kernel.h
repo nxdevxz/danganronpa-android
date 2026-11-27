@@ -32,6 +32,13 @@ struct KThread : KObject {
     int prio = 44, core = 0;
     std::atomic<const char*> hle{nullptr};  // the HLE function it is in (for the stall report), null in guest code
     bool started = false, exited = false, cancel = false;
+    // Cooperative suspension: only the target publishes a register image.
+    std::atomic<bool> pause_requested{false};
+    std::mutex activity_lock;
+    std::condition_variable activity_cv;
+    const CPU* parked_regs = nullptr;  // immutable until released under activity_lock
+    uint64_t parked_pc = 0;
+    bool in_wait_svc = false;
     // wait state (under the kernel lock)
     bool wake = false;
     uint32_t wait_result = 0;
@@ -65,6 +72,7 @@ std::shared_ptr<KObject> handle_get(uint32_t h);
 void handle_close(uint32_t h);
 void notify_all();
 KThread* self_thread();
+void guest_checkpoint(CPU& regs, uint64_t pc);
 void backtrace(CPU& c);
 uint64_t heap_size();  // svcSetHeapSize's current size
 

@@ -218,9 +218,22 @@ void upload_texture(VkCommandBuffer cb, const Texture& t, GpuImage& img, uint64_
     }
     bool decode = bc_host_decode(t.format);  // nvn_bc.cpp: no BC on this GPU
     if (decode && t.stride) {
-        static bool logged = false;
-        if (!logged) log("nvn/vk: pitch-linear BC texture (format %#x): not decoded, cleared", t.format), logged = true;
-        return clear_image(cb, img);
+        // Pitch is measured in bytes per row of compressed blocks. Strip its padding
+        // before expanding into the same host format as block-linear BC textures.
+        const uint64_t row = ((uint64_t(img.width) + bw - 1) / bw) * bytes;
+        const uint64_t rows = (uint64_t(img.height) + bh - 1) / bh;
+        if (layers != 1 || img.levels != 1 || !rows || row > t.stride || row > t.storage_size ||
+            rows - 1 > (t.storage_size - row) / t.stride) return clear_image(cb, img);
+        const auto* src = reinterpret_cast<const uint8_t*>(t.memory);
+        if (row != t.stride) {
+            linear.resize(row * rows);
+            for (uint64_t y = 0; y < rows; ++y)
+                std::memcpy(linear.data() + y * row, src + y * t.stride, row);
+            src = linear.data();
+        }
+        const int32_t region[] = {0, 0, 0, int32_t(img.width), int32_t(img.height), 1};
+        upload_region(cb, t, img, 0, 0, region, src);
+        return;
     }
     if (t.stride && astc_decoded(t.format)) {  // never seen: pitch-linear ASTC would need the decoder too
         log("nvn/vk: pitch-linear ASTC texture %ux%u format %#x: cleared", img.width, img.height, t.format);
@@ -271,7 +284,7 @@ void upload_texture(VkCommandBuffer cb, const Texture& t, GpuImage& img, uint64_
         uint32_t tb = bc_decoded_bytes(t.format), slices = img.view_type == VK_IMAGE_VIEW_TYPE_3D ? layers : img.layers;
         uint64_t total = 0;
         for (const auto& l : levels) total += uint64_t(l.width) * l.height * slices * tb;
-        Upload u = upload_alloc(total, 16);
+        Upload u = texture_stage(total);
         uint64_t at = 0;
         for (uint32_t k = 0; k < levels.size(); k++) {
             bc_decode(t.format, linear.data() + levels[k].offset, levels[k].width, levels[k].height, slices, u.ptr + at);
@@ -329,25 +342,27 @@ bool upload_region(VkCommandBuffer cb, const Texture& t, GpuImage& img, uint32_t
     const uint32_t host_bytes = vk_block_bytes(img.format) ? vk_block_bytes(img.format) : bytes;
     const bool widen = t.format == 0x3f && img.format == VK_FORMAT_R16G16B16A16_SFLOAT && !img.alpha_from_r;
     Upload u;
+    uint64_t staged_size = 0;
+    auto stage = [&](uint64_t size) { staged_size = size; return texture_stage(size); };
     uint32_t texel_w = bw, texel_h = bh;  // the staged data's block, in texels
     if (bc_host_decode(t.format)) {
         uint32_t tb = bc_decoded_bytes(t.format);
-        u = texture_stage(uint64_t(w) * h * d * tb);
+        u = stage(uint64_t(w) * h * d * tb);
         bc_decode(t.format, src, w, h, d, u.ptr);
         texel_w = texel_h = 1;
     } else if (astc_decoded(t.format)) {
-        u = texture_stage(uint64_t(w) * h * d * 4);
+        u = stage(uint64_t(w) * h * d * 4);
         astc_decode_image(src, w, h, d, bw, bh, t.format >= 0x87, u.ptr);
         texel_w = texel_h = 1;
     } else if (widen) {
-        u = texture_stage(blocks * 8);
+        u = stage(blocks * 8);
         widen_r11g11b10(src, u.ptr, blocks);
     } else if (img.alpha_from_r) {  // R8 -> RGBA8 (255, 255, 255, R)
-        u = texture_stage(blocks * 4);
+        u = stage(blocks * 4);
         uint32_t* out = reinterpret_cast<uint32_t*>(u.ptr);
         for (uint64_t k = 0; k < blocks; k++) out[k] = 0x00FFFFFFu | (uint32_t(src[k]) << 24);
     } else if (host_bytes == bytes) {
-        u = texture_stage(blocks * bytes);
+        u = stage(blocks * bytes);
         std::memcpy(u.ptr, src, blocks * bytes);
     } else {
         static std::set<uint32_t> logged;
@@ -359,10 +374,10 @@ bool upload_region(VkCommandBuffer cb, const Texture& t, GpuImage& img, uint32_t
     {   // diagnostic: first uploads per NVN format (are the converted bytes empty? which host format?)
         static std::map<uint32_t, int> seen;
         if (seen[t.format]++ < 3) {
-            uint64_t nonzero = 0, sum = 0;
+            uint64_t nonzero = 0;
             const uint8_t* q = static_cast<const uint8_t*>(u.ptr);
-            const uint64_t n = std::min<uint64_t>(blocks * (texel_w == 1 ? 4 : bytes), 1u << 16);
-            for (uint64_t k = 0; k < n; k++) nonzero += q[k] != 0, sum += q[k];
+            const uint64_t n = std::min<uint64_t>(staged_size, 1u << 16);
+            for (uint64_t k = 0; k < n; k++) nonzero += q[k] != 0;
             log("nvn/diag: region upload fmt %#x -> vk %d (alpha_from_r %d) %ux%u level %u at %u,%u: %llu of %llu staged bytes nonzero",
                 t.format, int(img.format), int(img.alpha_from_r), w, h, level, x, y, (unsigned long long)nonzero,
                 (unsigned long long)n);

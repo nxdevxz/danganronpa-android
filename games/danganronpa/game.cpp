@@ -13,6 +13,8 @@
 #include <deque>
 #include <memory>
 #include <ctime>
+#include <chrono>
+#include <condition_variable>
 #include <media/NdkMediaCodec.h>
 #include <media/NdkMediaFormat.h>
 #include <mutex>
@@ -235,6 +237,8 @@ struct VideoProxy {
     uint64_t handle = 0, app_data = 0, empty_done = 0, fill_done = 0;
     AMediaCodec* codec = nullptr;
     bool failed = false;
+    bool opening = false; // under g_proxy_lock: new codec config now goes through the input queue
+    bool draining = false;  // pump thread only: input submitted since the last flush or EOS
     std::vector<uint8_t> config;                 // SPS/PPS (Annex B) from the codec-config buffers
     std::deque<Input> in;                        // pictures waiting for a MediaCodec input slot
     std::deque<uint64_t> give_back_in, free_out; // headers to return to the client / output headers it lent us
@@ -249,6 +253,14 @@ struct VideoProxy {
     }
 };
 std::mutex g_proxy_lock;
+std::condition_variable g_proxy_cv;
+uint64_t g_proxy_generation = 0;
+
+// Called under g_proxy_lock. The generation also catches work submitted by a guest callback.
+void proxy_changed() {
+    ++g_proxy_generation;
+    g_proxy_cv.notify_one();
+}
 std::vector<std::shared_ptr<VideoProxy>> g_proxies;
 
 std::shared_ptr<VideoProxy> proxy_find(uint64_t handle) {
@@ -345,7 +357,7 @@ void proxy_copy_picture(const VideoProxy& p, const uint8_t* src, size_t size, ui
     }
 }
 
-bool proxy_open_codec(VideoProxy& p, int width, int height) {
+bool proxy_open_codec(VideoProxy& p, int width, int height, const std::vector<uint8_t>& config) {
     AMediaCodec* c = AMediaCodec_createDecoderByType("video/avc");
     if (!c) return log("movie: no host H.264 decoder"), false;
     AMediaFormat* f = AMediaFormat_new();
@@ -354,7 +366,7 @@ bool proxy_open_codec(VideoProxy& p, int width, int height) {
     AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_HEIGHT, height);
     AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_MAX_INPUT_SIZE, 1 << 20);
     AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7F420888);  // COLOR_FormatYUV420Flexible
-    if (!p.config.empty()) AMediaFormat_setBuffer(f, "csd-0", p.config.data(), p.config.size());
+    if (!config.empty()) AMediaFormat_setBuffer(f, "csd-0", config.data(), config.size());
     media_status_t st = AMediaCodec_configure(c, f, nullptr, nullptr, 0);
     AMediaFormat_delete(f);
     if (st == AMEDIA_OK) st = AMediaCodec_start(c);
@@ -365,7 +377,7 @@ bool proxy_open_codec(VideoProxy& p, int width, int height) {
     }
     char* name = nullptr;
     if (AMediaCodec_getName(c, &name) == AMEDIA_OK && name) {
-        log("movie: host H.264 decoder %s for %dx%d, %zu bytes of parameter sets", name, width, height, p.config.size());
+        log("movie: host H.264 decoder %s for %dx%d, %zu bytes of parameter sets", name, width, height, config.size());
         AMediaCodec_releaseName(c, name);
     }
     p.codec = c;
@@ -388,7 +400,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
         flush = p.flush_codec;
         p.flush_codec = false;
     }
-    if (flush && p.codec) AMediaCodec_flush(p.codec);
+    if (flush && p.codec) { AMediaCodec_flush(p.codec); p.draining = false; }
     for (auto& [kind, header] : calls) {
         if (kind == 1) field<uint32_t>(header, 20) = 0, field<uint32_t>(header, 96) = 0;
         c.x[0] = p.handle, c.x[1] = p.app_data, c.x[2] = header;
@@ -397,10 +409,12 @@ void proxy_step(CPU& c, VideoProxy& p) {
     calls.clear();
 
     bool want_codec;
+    std::vector<uint8_t> config;
     int width = 0, height = 0;
     {
         std::lock_guard lk(g_proxy_lock);
         want_codec = !p.codec && !p.failed && !p.in.empty();
+        if (want_codec) { p.opening = true; config.swap(p.config); }
     }
     if (want_codec) {
         {
@@ -408,7 +422,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
             if (SoftComponent* k = soft_find(p.handle)) width = k->width, height = k->height;
         }
         if (width <= 0 || height <= 0) width = 960, height = 544;
-        if (!proxy_open_codec(p, width, height)) p.failed = true;
+        if (!proxy_open_codec(p, width, height, config)) p.failed = true;
     }
     if (!p.codec) {
         if (p.failed) {  // nothing will ever decode: give the queued pictures back as empty
@@ -433,7 +447,8 @@ void proxy_step(CPU& c, VideoProxy& p) {
         uint32_t flags = 0;
         if (item.flags & 0x1) flags |= 4;      // OMX_BUFFERFLAG_EOS -> BUFFER_FLAG_END_OF_STREAM
         if (item.flags & 0x80) flags |= 2;     // OMX_BUFFERFLAG_CODECCONFIG -> BUFFER_FLAG_CODEC_CONFIG
-        AMediaCodec_queueInputBuffer(p.codec, static_cast<size_t>(idx), 0, n, static_cast<uint64_t>(item.pts), flags);
+        if (AMediaCodec_queueInputBuffer(p.codec, static_cast<size_t>(idx), 0, n, static_cast<uint64_t>(item.pts), flags) == AMEDIA_OK)
+            p.draining = true;
         {
             std::lock_guard lk(g_proxy_lock);
             if (!p.in.empty()) p.in.pop_front();
@@ -488,6 +503,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
         field<uint32_t>(header, 20) = filled;
         field<int64_t>(header, 88) = info.presentationTimeUs;
         field<uint32_t>(header, 96) = (info.flags & 4) ? 1u : 0u;  // END_OF_STREAM -> OMX_BUFFERFLAG_EOS
+        if (info.flags & 4) p.draining = false;
         if (info.flags & 4) log("movie: host decoder: end of stream picture after %u pictures", p.frames_out);
         AMediaCodec_releaseOutputBuffer(p.codec, static_cast<size_t>(o), false);
         c.x[0] = p.handle, c.x[1] = p.app_data, c.x[2] = header;
@@ -495,15 +511,21 @@ void proxy_step(CPU& c, VideoProxy& p) {
     }
 }
 
-// Guest thread body: every 2 ms each proxied decoder gets a round.
+// MediaCodec is polled while it has work. Guest queue changes wake an idle pump.
 void proxy_pump(CPU& c) {
     log("movie: host decoder pump thread running");
+    uint64_t seen = 0;
     for (;;) {
-        timespec ts{0, 2'000'000};
-        nanosleep(&ts, nullptr);
         std::vector<std::shared_ptr<VideoProxy>> list;
         {
-            std::lock_guard lk(g_proxy_lock);
+            std::unique_lock lk(g_proxy_lock);
+            auto changed = [&] { return seen != g_proxy_generation; };
+            bool retry = std::any_of(g_proxies.begin(), g_proxies.end(), [](const auto& p) {
+                return !p->in.empty() || (p->draining && !p->free_out.empty());
+            });
+            if (retry) g_proxy_cv.wait_for(lk, std::chrono::milliseconds(2), changed);
+            else g_proxy_cv.wait(lk, changed);
+            seen = g_proxy_generation;
             list = g_proxies;
         }
         for (auto& p : list) {
@@ -514,13 +536,15 @@ void proxy_pump(CPU& c) {
             if (p->last_beat_ns && t - p->last_beat_ns < 1'000'000'000ull) continue;
             p->last_beat_ns = t;
             size_t queued, lent;
+            unsigned fills;
             {
                 std::lock_guard lk(g_proxy_lock);
                 queued = p->in.size(), lent = p->free_out.size();
+                fills = p->fills;
             }
             if (p->frames_in || p->frames_out)
                 log("movie: host decoder: %u in, %u out; %zu waiting for the codec, %zu output buffers lent (%u lends so far), "
-                    "%u polls without a free output buffer", p->frames_in, p->frames_out, queued, lent, p->fills,
+                    "%u polls without a free output buffer", p->frames_in, p->frames_out, queued, lent, fills,
                     p->blocked_polls);
         }
     }
@@ -552,6 +576,7 @@ void soft_fill_this_buffer(CPU& c) {
         std::lock_guard lk(g_proxy_lock);
         p->free_out.push_back(c.x[1]);
         p->fills++;
+        proxy_changed();
         c.x[0] = 0;
         return;
     }
@@ -570,6 +595,7 @@ void soft_send_command(CPU& c) {
             std::lock_guard lk(g_proxy_lock);
             if (state_down || flush_out) p->return_out = true;
             if (state_down || flush_in || flush_out) p->flush_codec = true, p->in.clear();
+            proxy_changed();
         }
         log("movie: OMX command %u (%u) on the host-decoded component", cmd, param);
     }
@@ -582,7 +608,7 @@ void soft_deinit(CPU& c) {
     {
         std::lock_guard lk(g_proxy_lock);
         for (auto it = g_proxies.begin(); it != g_proxies.end(); ++it)
-            if ((*it)->handle == handle) { g_proxies.erase(it); break; }
+            if ((*it)->handle == handle) { g_proxies.erase(it); proxy_changed(); break; }
     }
     call(c, g_deinit_orig);
 }
@@ -639,12 +665,13 @@ void soft_empty_this_buffer(CPU& c) {
         if (proxy) {
             std::lock_guard lk(g_proxy_lock);
             if (flags & 0x80) {  // parameter sets: kept for the codec's configuration, nothing to decode
-                if (!proxy->codec) proxy->config.insert(proxy->config.end(), d, d + len);
+                if (!proxy->opening) proxy->config.insert(proxy->config.end(), d, d + len);
                 else proxy->in.push_back({std::vector<uint8_t>(d, d + len), 0, flags});
             } else if (len || (flags & 0x1)) {
                 proxy->in.push_back({std::vector<uint8_t>(d, d + len), field<int64_t>(header, 88), flags});
             }
             proxy->give_back_in.push_back(header);
+            proxy_changed();
             c.x[0] = 0;
             return;
         }
@@ -728,6 +755,7 @@ void open_movie_component(CPU& c) {
             for (auto it = g_proxies.begin(); it != g_proxies.end();)
                 it = ((*it)->handle == component) ? g_proxies.erase(it) : it + 1;
             g_proxies.push_back(proxy);
+            proxy_changed();
         }
         if (tbl[4] != g_send_thunk) g_send_orig = tbl[4], tbl[4] = g_send_thunk;
         if (tbl[5] != g_get_thunk) g_get_orig = tbl[5], tbl[5] = g_get_thunk;
