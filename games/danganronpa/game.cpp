@@ -236,7 +236,8 @@ struct VideoProxy {
     int32_t color = 0, codec_stride = 0, codec_rows = 0, pic_w = 0, pic_h = 0, left = 0, top = 0;
     bool has_image = false, format_known = false;
     Plane plane[3];
-    unsigned frames_in = 0, frames_out = 0;
+    unsigned frames_in = 0, frames_out = 0, blocked_polls = 0, fills = 0, empties = 0;
+    uint64_t last_beat_ns = 0;
     ~VideoProxy() {
         if (codec) { AMediaCodec_stop(codec); AMediaCodec_delete(codec); }
     }
@@ -437,7 +438,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
         uint64_t header;
         {
             std::lock_guard lk(g_proxy_lock);
-            if (p.free_out.empty()) break;
+            if (p.free_out.empty()) { p.blocked_polls++; break; }
             header = p.free_out.front();
         }
         AMediaCodecBufferInfo info;
@@ -497,7 +498,23 @@ void proxy_pump(CPU& c) {
             std::lock_guard lk(g_proxy_lock);
             list = g_proxies;
         }
-        for (auto& p : list) proxy_step(c, *p);
+        for (auto& p : list) {
+            proxy_step(c, *p);
+            timespec now{};
+            clock_gettime(CLOCK_MONOTONIC, &now);
+            const uint64_t t = uint64_t(now.tv_sec) * 1'000'000'000ull + uint64_t(now.tv_nsec);
+            if (p->last_beat_ns && t - p->last_beat_ns < 1'000'000'000ull) continue;
+            p->last_beat_ns = t;
+            size_t queued, lent;
+            {
+                std::lock_guard lk(g_proxy_lock);
+                queued = p->in.size(), lent = p->free_out.size();
+            }
+            if (p->frames_in || p->frames_out)
+                log("movie: host decoder: %u in, %u out; %zu waiting for the codec, %zu output buffers lent (%u lends so far), "
+                    "%u polls without a free output buffer", p->frames_in, p->frames_out, queued, lent, p->fills,
+                    p->blocked_polls);
+        }
     }
 }
 
@@ -526,6 +543,7 @@ void soft_fill_this_buffer(CPU& c) {
     if (auto p = proxy_find(c.x[0])) {
         std::lock_guard lk(g_proxy_lock);
         p->free_out.push_back(c.x[1]);
+        p->fills++;
         c.x[0] = 0;
         return;
     }
@@ -699,6 +717,8 @@ const char* const kSlotName[kSlots] = {
     "AcquireOutputBufferIndex", "GetOutputBuffer", "GetOutputBufferSize", "ReleaseOutputBufferIndex",
     "GetLastError", "GetOutputBuffer(format)", "GetOutputBufferFormat"};
 uint64_t g_slot_original[kSlots];
+std::atomic<uint64_t> g_video_decoder{0};
+std::atomic<unsigned> g_video_calls{0};
 std::atomic<unsigned> g_slot_count[kSlots];
 
 template <int N>
@@ -707,7 +727,8 @@ void trace_decoder_slot(CPU& c) {
     call(c, g_slot_original[N]);
     const int32_t result = static_cast<int32_t>(c.x[0]);
     const unsigned n = g_slot_count[N].fetch_add(1, std::memory_order_relaxed);
-    if (n >= 30 && n % 300 != 0) return;
+    const bool video = self == g_video_decoder.load();
+    if (video ? g_video_calls.fetch_add(1) >= 600 : (n >= 30 && n % 300 != 0)) return;
     char extra[160] = "";
     if (result == 0) {
         if (N == 9 && a1 && a2)
@@ -736,10 +757,12 @@ const std::array<HleFn, kSlots> kTrace = make_trace(std::make_integer_sequence<i
 
 void open_movie_decoder(CPU& c) {
     const uint64_t self = c.x[0];
+    const bool is_video = static_cast<int>(c.x[1]) == 1;
     log("movie: Decoder ctor type %d format %d mode %d priority %d (object %llx)",
         static_cast<int>(c.x[1]), static_cast<int>(c.x[2]), static_cast<int>(c.x[3]),
         static_cast<int>(c.x[4]), static_cast<unsigned long long>(self));
     call(c, original_decoder_ctor);
+    if (is_video) g_video_decoder = self;
     static std::atomic<bool> hooked{false};
     const uint64_t vtable = self ? *reinterpret_cast<uint64_t*>(self) : 0;
     if (vtable && !hooked.exchange(true)) {
