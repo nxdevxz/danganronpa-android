@@ -9,6 +9,11 @@
 #include <algorithm>
 #include <atomic>
 #include <utility>
+#include <deque>
+#include <memory>
+#include <ctime>
+#include <media/NdkMediaCodec.h>
+#include <media/NdkMediaFormat.h>
 #include <mutex>
 #include <vector>
 
@@ -48,8 +53,9 @@ struct SoftComponent {
 };
 std::mutex g_soft_lock;
 std::vector<SoftComponent> g_soft;
-uint64_t g_set_orig, g_get_orig, g_fill_orig, g_event_orig, g_empty_orig;
-uint64_t g_set_thunk, g_get_thunk, g_fill_thunk, g_event_thunk, g_empty_thunk;
+uint64_t g_set_orig, g_get_orig, g_fill_orig, g_event_orig, g_empty_orig, g_send_orig, g_fill_this_orig, g_deinit_orig;
+uint64_t g_set_thunk, g_get_thunk, g_fill_thunk, g_event_thunk, g_empty_thunk, g_send_thunk, g_fill_this_thunk,
+    g_deinit_thunk, g_pump_thunk;
 std::atomic<unsigned> g_omx_log{0};
 
 SoftComponent* soft_find(uint64_t handle) {
@@ -212,6 +218,349 @@ void soft_event_handler(CPU& c) {
     call(c, g_event_orig);
 }
 
+// ---- Host H.264 decoder behind the OMX component ----------------------------------------------------------
+// Google's software H.264 decoder in the Switch library (the old On2 one) only handles Baseline; the game's
+// video is Main profile with CABAC, so it fails on the first picture. The component stays (it does the port,
+// buffer and state bookkeeping the client expects) but its data path is replaced: input goes to Android's
+// MediaCodec, and decoded NV12 pictures are written into the client's output buffers from a guest thread.
+struct VideoProxy {
+    struct Input { std::vector<uint8_t> data; int64_t pts = 0; uint32_t flags = 0; };
+    struct Plane { int32_t offset = 0, row = 0, col = 0; };
+    uint64_t handle = 0, app_data = 0, empty_done = 0, fill_done = 0;
+    AMediaCodec* codec = nullptr;
+    bool failed = false;
+    std::vector<uint8_t> config;                 // SPS/PPS (Annex B) from the codec-config buffers
+    std::deque<Input> in;                        // pictures waiting for a MediaCodec input slot
+    std::deque<uint64_t> give_back_in, free_out; // headers to return to the client / output headers it lent us
+    bool return_out = false, flush_codec = false;
+    int32_t color = 0, codec_stride = 0, codec_rows = 0, pic_w = 0, pic_h = 0, left = 0, top = 0;
+    bool has_image = false, format_known = false;
+    Plane plane[3];
+    unsigned frames_in = 0, frames_out = 0;
+    ~VideoProxy() {
+        if (codec) { AMediaCodec_stop(codec); AMediaCodec_delete(codec); }
+    }
+};
+std::mutex g_proxy_lock;
+std::vector<std::shared_ptr<VideoProxy>> g_proxies;
+
+std::shared_ptr<VideoProxy> proxy_find(uint64_t handle) {
+    std::lock_guard lk(g_proxy_lock);
+    for (auto& p : g_proxies) if (p->handle == handle) return p;
+    return nullptr;
+}
+
+void proxy_read_format(VideoProxy& p, AMediaFormat* f) {
+    p.color = p.codec_stride = p.codec_rows = p.left = p.top = p.pic_w = p.pic_h = 0;
+    AMediaFormat_getInt32(f, "color-format", &p.color);
+    AMediaFormat_getInt32(f, "stride", &p.codec_stride);
+    AMediaFormat_getInt32(f, "slice-height", &p.codec_rows);
+    int32_t w = 0, h = 0, l = 0, t = 0, r = 0, b = 0;
+    AMediaFormat_getInt32(f, "width", &w);
+    AMediaFormat_getInt32(f, "height", &h);
+    p.pic_w = w, p.pic_h = h;
+    if (AMediaFormat_getRect(f, "crop", &l, &t, &r, &b)) {
+        p.left = l, p.top = t;
+        if (r - l + 1 > 0 && b - t + 1 > 0) p.pic_w = r - l + 1, p.pic_h = b - t + 1;
+    }
+    // MediaImage2: type, planes, width, height, bit depth, allocated depth, then Y, U, V {offset, col inc, row inc, subsampling x2}
+    p.has_image = false;
+    void* data = nullptr;
+    size_t n = 0;
+    if (AMediaFormat_getBuffer(f, "image-data", &data, &n) && data && n >= 24 + 3 * 20) {
+        uint32_t v[6 + 3 * 5];
+        std::memcpy(v, data, sizeof v);
+        bool ok = v[0] == 1 && v[1] == 3 && v[4] == 8 && v[5] == 8;
+        for (int k = 0; k < 3 && ok; k++) {
+            const uint32_t* q = v + 6 + 5 * k;
+            const int32_t col = static_cast<int32_t>(q[1]), row = static_cast<int32_t>(q[2]);
+            if (col < 1 || row < 1) ok = false;
+            p.plane[k] = {static_cast<int32_t>(q[0]), row, col};
+        }
+        p.has_image = ok;
+    }
+    p.format_known = true;
+    log("movie: host decoder output: color 0x%x, %dx%d (crop at %d,%d), stride %d, slice %d, image-data %d (%s)",
+        p.color, p.pic_w, p.pic_h, p.left, p.top, p.codec_stride, p.codec_rows, p.has_image ? 1 : 0,
+        AMediaFormat_toString(f));
+}
+
+// The decoder's picture into an NV12 output buffer of `stride` x `slice` (black where the picture does not reach).
+void proxy_copy_picture(const VideoProxy& p, const uint8_t* src, size_t size, uint8_t* dst, int stride, int slice) {
+    const size_t luma = size_t(stride) * slice;
+    std::memset(dst, 16, luma);
+    std::memset(dst + luma, 128, luma / 2);
+    const int w = std::min(p.pic_w, stride) & ~1, h = std::min(p.pic_h, slice) & ~1;
+    if (w <= 0 || h <= 0) return;
+    uint8_t* uv = dst + luma;
+    if (p.has_image) {
+        auto reach = [&](const VideoProxy::Plane& q, int pw, int ph) {
+            return int64_t(q.offset) + int64_t(ph - 1) * q.row + int64_t(pw - 1) * q.col < int64_t(size);
+        };
+        const VideoProxy::Plane &Y = p.plane[0], &U = p.plane[1], &V = p.plane[2];
+        if (reach(Y, w, h) && reach(U, w / 2, h / 2) && reach(V, w / 2, h / 2)) {
+            for (int r = 0; r < h; r++) {
+                const uint8_t* s = src + Y.offset + size_t(r) * Y.row;
+                if (Y.col == 1) std::memcpy(dst + size_t(r) * stride, s, size_t(w));
+                else for (int x = 0; x < w; x++) dst[size_t(r) * stride + x] = s[size_t(x) * Y.col];
+            }
+            for (int r = 0; r < h / 2; r++) {
+                const uint8_t* u = src + U.offset + size_t(r) * U.row;
+                const uint8_t* v = src + V.offset + size_t(r) * V.row;
+                for (int x = 0; x < w / 2; x++)
+                    uv[size_t(r) * stride + 2 * x] = u[size_t(x) * U.col], uv[size_t(r) * stride + 2 * x + 1] = v[size_t(x) * V.col];
+            }
+            return;
+        }
+    }
+    const int cs = p.codec_stride > 0 ? p.codec_stride : p.pic_w + p.left;
+    const int rows = p.codec_rows > 0 ? p.codec_rows : p.pic_h + p.top;
+    const size_t y0 = size_t(p.top) * cs + p.left, chroma = size_t(cs) * rows;
+    for (int r = 0; r < h; r++) {
+        const size_t at = y0 + size_t(r) * cs;
+        if (at + w > size) return;
+        std::memcpy(dst + size_t(r) * stride, src + at, size_t(w));
+    }
+    if (p.color == 19) {  // planar I420
+        const size_t half = size_t(cs) / 2, plane = half * (size_t(rows) / 2);
+        for (int r = 0; r < h / 2; r++) {
+            const size_t at = chroma + size_t(p.top / 2 + r) * half + p.left / 2;
+            if (at + plane + w / 2 > size) return;
+            for (int x = 0; x < w / 2; x++)
+                uv[size_t(r) * stride + 2 * x] = src[at + x], uv[size_t(r) * stride + 2 * x + 1] = src[at + plane + x];
+        }
+        return;
+    }
+    for (int r = 0; r < h / 2; r++) {  // semi-planar
+        const size_t at = chroma + size_t(p.top / 2 + r) * cs + (p.left & ~1);
+        if (at + w > size) return;
+        std::memcpy(uv + size_t(r) * stride, src + at, size_t(w));
+    }
+}
+
+bool proxy_open_codec(VideoProxy& p, int width, int height) {
+    AMediaCodec* c = AMediaCodec_createDecoderByType("video/avc");
+    if (!c) return log("movie: no host H.264 decoder"), false;
+    AMediaFormat* f = AMediaFormat_new();
+    AMediaFormat_setString(f, AMEDIAFORMAT_KEY_MIME, "video/avc");
+    AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_WIDTH, width);
+    AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_HEIGHT, height);
+    AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_MAX_INPUT_SIZE, 1 << 20);
+    AMediaFormat_setInt32(f, AMEDIAFORMAT_KEY_COLOR_FORMAT, 0x7F420888);  // COLOR_FormatYUV420Flexible
+    if (!p.config.empty()) AMediaFormat_setBuffer(f, "csd-0", p.config.data(), p.config.size());
+    media_status_t st = AMediaCodec_configure(c, f, nullptr, nullptr, 0);
+    AMediaFormat_delete(f);
+    if (st == AMEDIA_OK) st = AMediaCodec_start(c);
+    if (st != AMEDIA_OK) {
+        log("movie: host H.264 decoder refused %dx%d (%d)", width, height, static_cast<int>(st));
+        AMediaCodec_delete(c);
+        return false;
+    }
+    char* name = nullptr;
+    if (AMediaCodec_getName(c, &name) == AMEDIA_OK && name) {
+        log("movie: host H.264 decoder %s for %dx%d, %zu bytes of parameter sets", name, width, height, p.config.size());
+        AMediaCodec_releaseName(c, name);
+    }
+    p.codec = c;
+    return true;
+}
+
+// One round for one decoder: return headers, feed MediaCodec, hand finished pictures to the client.
+void proxy_step(CPU& c, VideoProxy& p) {
+    std::vector<std::pair<int, uint64_t>> calls;  // (0: EmptyBufferDone, 1: FillBufferDone, header)
+    bool flush = false;
+    {
+        std::lock_guard lk(g_proxy_lock);
+        for (uint64_t h : p.give_back_in) calls.push_back({0, h});
+        p.give_back_in.clear();
+        if (p.return_out) {
+            for (uint64_t h : p.free_out) calls.push_back({1, h});
+            p.free_out.clear();
+            p.return_out = false;
+        }
+        flush = p.flush_codec;
+        p.flush_codec = false;
+    }
+    if (flush && p.codec) AMediaCodec_flush(p.codec);
+    for (auto& [kind, header] : calls) {
+        if (kind == 1) field<uint32_t>(header, 20) = 0, field<uint32_t>(header, 96) = 0;
+        c.x[0] = p.handle, c.x[1] = p.app_data, c.x[2] = header;
+        call(c, kind == 0 ? p.empty_done : p.fill_done);
+    }
+    calls.clear();
+
+    bool want_codec;
+    int width = 0, height = 0;
+    {
+        std::lock_guard lk(g_proxy_lock);
+        want_codec = !p.codec && !p.failed && !p.in.empty();
+    }
+    if (want_codec) {
+        {
+            std::lock_guard lk(g_soft_lock);
+            if (SoftComponent* k = soft_find(p.handle)) width = k->width, height = k->height;
+        }
+        if (width <= 0 || height <= 0) width = 960, height = 544;
+        if (!proxy_open_codec(p, width, height)) p.failed = true;
+    }
+    if (!p.codec) {
+        if (p.failed) {  // nothing will ever decode: give the queued pictures back as empty
+            std::lock_guard lk(g_proxy_lock);
+            p.in.clear();
+        }
+        return;
+    }
+    for (;;) {  // input
+        VideoProxy::Input item;
+        {
+            std::lock_guard lk(g_proxy_lock);
+            if (p.in.empty()) break;
+            item = p.in.front();
+        }
+        const ssize_t idx = AMediaCodec_dequeueInputBuffer(p.codec, 0);
+        if (idx < 0) break;
+        size_t cap = 0;
+        uint8_t* buf = AMediaCodec_getInputBuffer(p.codec, static_cast<size_t>(idx), &cap);
+        const size_t n = buf ? std::min(cap, item.data.size()) : 0;
+        if (n) std::memcpy(buf, item.data.data(), n);
+        uint32_t flags = 0;
+        if (item.flags & 0x1) flags |= 4;      // OMX_BUFFERFLAG_EOS -> BUFFER_FLAG_END_OF_STREAM
+        if (item.flags & 0x80) flags |= 2;     // OMX_BUFFERFLAG_CODECCONFIG -> BUFFER_FLAG_CODEC_CONFIG
+        AMediaCodec_queueInputBuffer(p.codec, static_cast<size_t>(idx), 0, n, static_cast<uint64_t>(item.pts), flags);
+        {
+            std::lock_guard lk(g_proxy_lock);
+            if (!p.in.empty()) p.in.pop_front();
+        }
+        if (p.frames_in++ < 4) log("movie: host decoder input #%u: %zu bytes, pts %lld us", p.frames_in - 1, n, static_cast<long long>(item.pts));
+    }
+    for (;;) {  // output
+        uint64_t header;
+        {
+            std::lock_guard lk(g_proxy_lock);
+            if (p.free_out.empty()) break;
+            header = p.free_out.front();
+        }
+        AMediaCodecBufferInfo info;
+        const ssize_t o = AMediaCodec_dequeueOutputBuffer(p.codec, &info, 0);
+        if (o == AMEDIACODEC_INFO_OUTPUT_FORMAT_CHANGED) {
+            if (AMediaFormat* f = AMediaCodec_getOutputFormat(p.codec)) proxy_read_format(p, f), AMediaFormat_delete(f);
+            continue;
+        }
+        if (o == AMEDIACODEC_INFO_OUTPUT_BUFFERS_CHANGED) continue;
+        if (o < 0) break;
+        {
+            std::lock_guard lk(g_proxy_lock);
+            if (!p.free_out.empty()) p.free_out.pop_front();
+        }
+        if (!p.format_known)
+            if (AMediaFormat* f = AMediaCodec_getOutputFormat(p.codec)) proxy_read_format(p, f), AMediaFormat_delete(f);
+        int stride = 0, slice = 0;
+        {
+            std::lock_guard lk(g_soft_lock);
+            if (SoftComponent* k = soft_find(p.handle)) {
+                stride = k->stride > 0 ? k->stride : k->width;
+                slice = k->slice > 0 ? k->slice : k->height;
+            }
+        }
+        if (stride <= 0 || slice <= 0) stride = (p.pic_w + 15) & ~15, slice = (p.pic_h + 15) & ~15;
+        size_t size = 0;
+        const uint8_t* src = AMediaCodec_getOutputBuffer(p.codec, static_cast<size_t>(o), &size);
+        const uint32_t room = field<uint32_t>(header, 16) - field<uint32_t>(header, 24);
+        const size_t need = size_t(stride) * slice * 3 / 2;
+        uint32_t filled = 0;
+        if (src && info.size > 0 && need <= room) {
+            auto* dst = reinterpret_cast<uint8_t*>(field<uint64_t>(header, 8) + field<uint32_t>(header, 24));
+            proxy_copy_picture(p, src + info.offset, size - info.offset, dst, stride, slice);
+            filled = static_cast<uint32_t>(need);
+        }
+        if (p.frames_out++ < 6 || p.frames_out % 120 == 0)
+            log("movie: host decoder picture #%u: %d bytes, pts %lld us, flags %u -> %u bytes (%dx%d, buffer room %u)",
+                p.frames_out - 1, static_cast<int>(info.size), static_cast<long long>(info.presentationTimeUs),
+                static_cast<unsigned>(info.flags), filled, stride, slice, room);
+        field<uint32_t>(header, 20) = filled;
+        field<int64_t>(header, 88) = info.presentationTimeUs;
+        field<uint32_t>(header, 96) = (info.flags & 4) ? 1u : 0u;  // END_OF_STREAM -> OMX_BUFFERFLAG_EOS
+        AMediaCodec_releaseOutputBuffer(p.codec, static_cast<size_t>(o), false);
+        c.x[0] = p.handle, c.x[1] = p.app_data, c.x[2] = header;
+        call(c, p.fill_done);
+    }
+}
+
+// Guest thread body: every 2 ms each proxied decoder gets a round.
+void proxy_pump(CPU& c) {
+    log("movie: host decoder pump thread running");
+    for (;;) {
+        timespec ts{0, 2'000'000};
+        nanosleep(&ts, nullptr);
+        std::vector<std::shared_ptr<VideoProxy>> list;
+        {
+            std::lock_guard lk(g_proxy_lock);
+            list = g_proxies;
+        }
+        for (auto& p : list) proxy_step(c, *p);
+    }
+}
+
+void start_proxy_pump(CPU& c) {
+    static bool started = false;
+    if (started) return;
+    started = true;
+    const uint64_t create = find_symbol("_ZN2nn2os12CreateThreadEPNS0_10ThreadTypeEPFvPvES3_S3_mi");
+    const uint64_t start = find_symbol("_ZN2nn2os11StartThreadEPNS0_10ThreadTypeE");
+    if (!create || !start) return log("movie: nn::os::CreateThread/StartThread not found, no host decoder");
+    if (!g_pump_thunk) g_pump_thunk = hle_address_or("danganronpa_h264_pump", proxy_pump);
+    const uint64_t thread = kernel_alloc(0x1000), stack = kernel_alloc(0x20000);
+    uint64_t saved[31];
+    std::memcpy(saved, c.x, sizeof saved);
+    c.x[0] = thread, c.x[1] = g_pump_thunk, c.x[2] = 0, c.x[3] = stack, c.x[4] = 0x20000, c.x[5] = 16;
+    call(c, create);
+    const uint64_t rc = c.x[0];
+    c.x[0] = thread;
+    if (rc == 0) call(c, start);
+    std::memcpy(c.x, saved, sizeof saved);
+    if (rc) log("movie: CreateThread for the host decoder failed (%llx)", static_cast<unsigned long long>(rc));
+}
+
+// OMX_ERRORTYPE FillThisBuffer(OMX_HANDLETYPE, OMX_BUFFERHEADERTYPE*): the client lends an output buffer.
+void soft_fill_this_buffer(CPU& c) {
+    if (auto p = proxy_find(c.x[0])) {
+        std::lock_guard lk(g_proxy_lock);
+        p->free_out.push_back(c.x[1]);
+        c.x[0] = 0;
+        return;
+    }
+    call(c, g_fill_this_orig);
+}
+
+// OMX_ERRORTYPE SendCommand(OMX_HANDLETYPE, OMX_COMMANDTYPE, OMX_U32, OMX_PTR): going to Idle/Loaded or flushing the
+// output port must give the lent buffers back (the component the client believes in would have).
+void soft_send_command(CPU& c) {
+    if (auto p = proxy_find(c.x[0])) {
+        const uint32_t cmd = static_cast<uint32_t>(c.x[1]), param = static_cast<uint32_t>(c.x[2]);
+        const bool state_down = cmd == 0 && (param == 1 || param == 2);
+        const bool flush_out = cmd == 3 && (param == 1 || param == 0xFFFFFFFFu);
+        const bool flush_in = cmd == 3 && (param == 0 || param == 0xFFFFFFFFu);
+        if (state_down || flush_out || flush_in) {
+            std::lock_guard lk(g_proxy_lock);
+            if (state_down || flush_out) p->return_out = true;
+            if (state_down || flush_in || flush_out) p->flush_codec = true, p->in.clear();
+        }
+        log("movie: OMX command %u (%u) on the host-decoded component", cmd, param);
+    }
+    call(c, g_send_orig);
+}
+
+// OMX_ERRORTYPE ComponentDeInit(OMX_HANDLETYPE)
+void soft_deinit(CPU& c) {
+    const uint64_t handle = c.x[0];
+    {
+        std::lock_guard lk(g_proxy_lock);
+        for (auto it = g_proxies.begin(); it != g_proxies.end(); ++it)
+            if ((*it)->handle == handle) { g_proxies.erase(it); break; }
+    }
+    call(c, g_deinit_orig);
+}
+
 // The decoder wants an Annex B byte stream (00 00 00 01 before every NAL). MP4 carries length-prefixed NALs and
 // the parameter sets without start codes; four-byte lengths are rewritten in place, a lone SPS/PPS gets a prefix.
 const char* to_annex_b(uint64_t header, uint8_t* d, uint32_t len) {
@@ -248,16 +597,31 @@ const char* to_annex_b(uint64_t header, uint8_t* d, uint32_t len) {
 void soft_empty_this_buffer(CPU& c) {
     const uint64_t header = c.x[1];
     static std::atomic<unsigned> n{0};
+    const auto proxy = proxy_find(c.x[0]);
     if (header && field<uint32_t>(header, 104) == 0) {
         auto* d = reinterpret_cast<uint8_t*>(field<uint64_t>(header, 8) + field<uint32_t>(header, 24));
-        const uint32_t len = field<uint32_t>(header, 20), flags = field<uint32_t>(header, 96);
+        uint32_t len = field<uint32_t>(header, 20);
+        const uint32_t flags = field<uint32_t>(header, 96);
         const unsigned k = n.fetch_add(1);
         char hex[64] = "";
         for (uint32_t i = 0; i < len && i < 16; i++) std::snprintf(hex + 3 * i, sizeof hex - 3 * i, "%02x ", d[i]);
         const char* how = len ? to_annex_b(header, d, len) : "empty";
+        len = field<uint32_t>(header, 20);
         if (k < 14 || k % 200 == 0)
             log("movie: H.264 input #%u: %u bytes, flags 0x%x, pts %lld us, starts %s-> %s", k, len, flags,
                 static_cast<long long>(field<int64_t>(header, 88)), hex, how);
+        if (proxy) {
+            std::lock_guard lk(g_proxy_lock);
+            if (flags & 0x80) {  // parameter sets: kept for the codec's configuration, nothing to decode
+                if (!proxy->codec) proxy->config.insert(proxy->config.end(), d, d + len);
+                else proxy->in.push_back({std::vector<uint8_t>(d, d + len), 0, flags});
+            } else if (len || (flags & 0x1)) {
+                proxy->in.push_back({std::vector<uint8_t>(d, d + len), field<int64_t>(header, 88), flags});
+            }
+            proxy->give_back_in.push_back(header);
+            c.x[0] = 0;
+            return;
+        }
     }
     call(c, g_empty_orig);
 }
@@ -267,6 +631,7 @@ void open_movie_component(CPU& c) {
     char requested[96] = "(null)";
     if (name) std::snprintf(requested, sizeof requested, "%s", name);
     const uint64_t out = c.x[4];
+    uint64_t client_empty_done = 0;
     const bool swap = name && std::strcmp(name, "OMX.Nvidia.h264.decode") == 0;
     if (swap) {
         static const char software[] = "OMX.google.h264.decoder";
@@ -279,7 +644,7 @@ void open_movie_component(CPU& c) {
             for (int k = 0; k < 3; k++) copy[k] = reinterpret_cast<uint64_t*>(table)[k];
             if (!g_fill_thunk) g_fill_thunk = hle_address_or("danganronpa_omx_fill_buffer_done", soft_fill_buffer_done);
             if (!g_event_thunk) g_event_thunk = hle_address_or("danganronpa_omx_event", soft_event_handler);
-            g_fill_orig = copy[2], g_event_orig = copy[0];
+            g_fill_orig = copy[2], g_event_orig = copy[0], client_empty_done = copy[1];
             copy[2] = g_fill_thunk, copy[0] = g_event_thunk;
             c.x[2] = reinterpret_cast<uint64_t>(copy);
         }
@@ -288,20 +653,36 @@ void open_movie_component(CPU& c) {
     const int32_t result = static_cast<int32_t>(c.x[0]);
     const uint64_t component = (result == 0 && out) ? *reinterpret_cast<uint64_t*>(out) : 0;
     if (swap && component) {
-        auto* tbl = reinterpret_cast<uint64_t*>(component);  // OMX_COMPONENTTYPE: GetParameter +40, SetParameter +48
+        auto* tbl = reinterpret_cast<uint64_t*>(component);  // OMX_COMPONENTTYPE: SendCommand +32 ... ComponentDeInit +144
         if (!g_set_thunk) {
             g_get_thunk = hle_address_or("danganronpa_omx_get_parameter", soft_get_parameter);
             g_set_thunk = hle_address_or("danganronpa_omx_set_parameter", soft_set_parameter);
             g_empty_thunk = hle_address_or("danganronpa_omx_empty_this_buffer", soft_empty_this_buffer);
+            g_send_thunk = hle_address_or("danganronpa_omx_send_command", soft_send_command);
+            g_fill_this_thunk = hle_address_or("danganronpa_omx_fill_this_buffer", soft_fill_this_buffer);
+            g_deinit_thunk = hle_address_or("danganronpa_omx_deinit", soft_deinit);
         }
         {
             std::lock_guard lk(g_soft_lock);
             if (!soft_find(component)) g_soft.push_back({component});
             else *soft_find(component) = SoftComponent{component};
         }
+        auto proxy = std::make_shared<VideoProxy>();
+        proxy->handle = component, proxy->app_data = tbl[2];
+        proxy->empty_done = client_empty_done, proxy->fill_done = g_fill_orig;
+        {
+            std::lock_guard lk(g_proxy_lock);
+            for (auto it = g_proxies.begin(); it != g_proxies.end();)
+                it = ((*it)->handle == component) ? g_proxies.erase(it) : it + 1;
+            g_proxies.push_back(proxy);
+        }
+        if (tbl[4] != g_send_thunk) g_send_orig = tbl[4], tbl[4] = g_send_thunk;
         if (tbl[5] != g_get_thunk) g_get_orig = tbl[5], tbl[5] = g_get_thunk;
         if (tbl[6] != g_set_thunk) g_set_orig = tbl[6], tbl[6] = g_set_thunk;
-        if (tbl[15] != g_empty_thunk) g_empty_orig = tbl[15], tbl[15] = g_empty_thunk;  // EmptyThisBuffer +120
+        if (tbl[15] != g_empty_thunk) g_empty_orig = tbl[15], tbl[15] = g_empty_thunk;
+        if (tbl[16] != g_fill_this_thunk) g_fill_this_orig = tbl[16], tbl[16] = g_fill_this_thunk;
+        if (tbl[18] != g_deinit_thunk) g_deinit_orig = tbl[18], tbl[18] = g_deinit_thunk;
+        start_proxy_pump(c);
     }
     log("movie: OMX component '%s'%s -> result %d (0x%x), component %llx",
         requested, swap ? " (software swap)" : "", result, static_cast<unsigned>(result),
