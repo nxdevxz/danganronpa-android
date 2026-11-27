@@ -3,6 +3,7 @@
 #include "profile.h"
 #include <nx/runtime.h>
 #include <cstdlib>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <array>
@@ -437,6 +438,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
             std::lock_guard lk(g_proxy_lock);
             if (!p.in.empty()) p.in.pop_front();
         }
+        if (item.flags & 1) log("movie: host decoder: end of stream queued after %u inputs", p.frames_in + 1);
         if (p.frames_in++ < 4) log("movie: host decoder input #%u: %zu bytes, pts %lld us", p.frames_in - 1, n, static_cast<long long>(item.pts));
     }
     for (;;) {  // output
@@ -486,6 +488,7 @@ void proxy_step(CPU& c, VideoProxy& p) {
         field<uint32_t>(header, 20) = filled;
         field<int64_t>(header, 88) = info.presentationTimeUs;
         field<uint32_t>(header, 96) = (info.flags & 4) ? 1u : 0u;  // END_OF_STREAM -> OMX_BUFFERFLAG_EOS
+        if (info.flags & 4) log("movie: host decoder: end of stream picture after %u pictures", p.frames_out);
         AMediaCodec_releaseOutputBuffer(p.codec, static_cast<size_t>(o), false);
         c.x[0] = p.handle, c.x[1] = p.app_data, c.x[2] = header;
         call(c, p.fill_done);
@@ -649,12 +652,39 @@ void soft_empty_this_buffer(CPU& c) {
     call(c, g_empty_orig);
 }
 
+// The AAC decoder (not replaced): what it hands out, to tell silence from sound.
+uint64_t g_aac_fill_orig, g_aac_fill_thunk;
+void aac_fill_buffer_done(CPU& c) {
+    const uint64_t header = c.x[2];
+    static std::atomic<unsigned> n{0};
+    if (header && field<uint32_t>(header, 100) == 1) {
+        const unsigned k = n.fetch_add(1);
+        if (k < 6 || k % 100 == 0) {
+            const auto* pcm = reinterpret_cast<const int16_t*>(field<uint64_t>(header, 8) + field<uint32_t>(header, 24));
+            const uint32_t bytes = field<uint32_t>(header, 20);
+            int peak = 0;
+            for (uint32_t i = 0; i < bytes / 2; i++) peak = std::max(peak, std::abs(int(pcm[i])));
+            log("movie: AAC picture #%u: %u bytes, peak %d, pts %lld us, flags 0x%x", k, bytes, peak,
+                static_cast<long long>(field<int64_t>(header, 88)), field<uint32_t>(header, 96));
+        }
+    }
+    call(c, g_aac_fill_orig);
+}
+
 void open_movie_component(CPU& c) {
     const char* name = reinterpret_cast<const char*>(c.x[1]);
     char requested[96] = "(null)";
     if (name) std::snprintf(requested, sizeof requested, "%s", name);
     const uint64_t out = c.x[4];
     uint64_t client_empty_done = 0;
+    if (name && std::strcmp(name, "OMX.google.aac.decoder") == 0 && c.x[2]) {
+        auto* copy = new uint64_t[3];
+        for (int k = 0; k < 3; k++) copy[k] = reinterpret_cast<uint64_t*>(c.x[2])[k];
+        if (!g_aac_fill_thunk) g_aac_fill_thunk = hle_address_or("danganronpa_aac_fill_buffer_done", aac_fill_buffer_done);
+        g_aac_fill_orig = copy[2];
+        copy[2] = g_aac_fill_thunk;
+        c.x[2] = reinterpret_cast<uint64_t>(copy);
+    }
     const bool swap = name && std::strcmp(name, "OMX.Nvidia.h264.decode") == 0;
     if (swap) {
         static const char software[] = "OMX.google.h264.decoder";
@@ -733,7 +763,12 @@ void trace_decoder_slot(CPU& c) {
     const int32_t result = static_cast<int32_t>(c.x[0]);
     const unsigned n = g_slot_count[N].fetch_add(1, std::memory_order_relaxed);
     const bool video = self == g_video_decoder.load();
-    if (video ? g_video_calls.fetch_add(1) >= 600 : (n >= 30 && n % 300 != 0)) return;
+    static std::atomic<unsigned> notable{0};
+    // Start/Stop/Reset/Flush/GetLastError and every failure are always worth a line (the busy slots are limited).
+    const bool rare = (N >= 2 && N <= 8) || N == 16 || result != 0;
+    if (rare ? notable.fetch_add(1) >= 400
+             : (video ? g_video_calls.fetch_add(1) >= 600 : (n >= 30 && n % 300 != 0)))
+        return;
     char extra[160] = "";
     if (result == 0) {
         if (N == 9 && a1 && a2)
