@@ -60,6 +60,25 @@ struct BufferCopyInfo {
     uint32_t flags = 0;
 };
 
+std::vector<WriteBack> texture_readbacks;
+
+// (cmd, texture, view, region, destination GPU address, flags)
+void CopyTextureToBuffer(CPU& c) {
+    if (!c.x[3]) return;
+    Cmd cmd{Cmd::CopyTextureToBuffer};
+    const ViewInfo view = read_view(c, c.x[2]);
+    cmd.a[0] = c.x[1];
+    cmd.a[1] = c.x[4];
+    cmd.n = view.base_level;
+    cmd.a[3] = view.min_layer;
+    cmd.mask = uint32_t(c.x[5]);
+    cmd.a[4] = view.format;
+    for (int i = 0; i < 4; ++i) cmd.i[i] = ld<int32_t>(c.x[3] + 4 * i);
+    cmd.a[5] = ld<uint32_t>(c.x[3] + 16);
+    cmd.a[6] = ld<uint32_t>(c.x[3] + 20);
+    record(c.x[0], cmd);
+}
+
 void CopyBufferToTexture(CPU& c) {
     BufferCopyInfo info;
     info.dst_view = read_view(c, c.x[3]);
@@ -219,6 +238,65 @@ void replay_copy(VkCommandBuffer cb, const Cmd& c, const CmdList& list) {
     dst->rendered = true;  // GPU-written from now on
 }
 
+std::vector<WriteBack> take_texture_readbacks() {
+    return std::exchange(texture_readbacks, {});
+}
+
+bool replay_texture_readback(VkCommandBuffer cb, const Cmd& c) {
+    const Texture* tx = get<Texture>(c.a[0]);
+    GpuImage* img = tx ? ensure_contents(cb, c.a[0]) : nullptr;
+    uint64_t offset = 0;
+    const MemoryPool* pool = pool_at_gpu(c.a[1], &offset);
+    const uint32_t level = c.n;
+    const uint32_t w = uint32_t(c.i[3]), h = uint32_t(c.a[5]);
+    auto unsupported = [&] {
+        static unsigned reported = 0;
+        if (reported++ < 4) log("nvn: unsupported texture readback %ux%u, format %#x, flags %#x", w, h,
+                                tx ? tx->format : 0, c.mask);
+        return false;
+    };
+    if (!img || img->layout == VK_IMAGE_LAYOUT_UNDEFINED || !pool || !pool->memory || img->view_type == VK_IMAGE_VIEW_TYPE_3D ||
+        img->aspect != VK_IMAGE_ASPECT_COLOR_BIT || img->alpha_from_r || img->hud || img->uw ||
+        level >= img->levels || level >= 32 || c.i[0] < 0 || c.i[1] < 0 || c.i[2] < 0 ||
+        c.i[3] <= 0 || !h || c.a[6] != 1 || (c.mask & ~3u) ||
+        (c.a[4] && c.a[4] != tx->format) || vk_format(tx->format) != img->format)
+        return unsupported();
+    uint32_t bw, bh, bytes;
+    format_block(tx->format, bw, bh, bytes);
+    const uint64_t layer = c.a[3] + uint32_t(c.i[2]);
+    if (bw != 1 || bh != 1 || !bytes || layer >= img->layers ||
+        uint64_t(c.i[0]) + w > std::max(1u, img->width >> level) ||
+        uint64_t(c.i[1]) + h > std::max(1u, img->height >> level)) return unsupported();
+    const uint64_t row = uint64_t(w) * bytes, stride = c.a[2] ? c.a[2] : row;
+    if (offset > pool->size || row > pool->size - offset || stride < row ||
+        h - 1 > (pool->size - offset - row) / stride) return unsupported();
+    // Limit each reservation so even a large image fits the staging ring.
+    if (row * h > (8u << 20)) return unsupported();
+    Upload up = upload_alloc(row * h, 16);
+    VkBufferImageCopy r{};
+    r.bufferOffset = up.offset;
+    r.imageSubresource = {VK_IMAGE_ASPECT_COLOR_BIT, level, uint32_t(layer), 1};
+    r.imageOffset = {c.i[0], c.i[1], 0};
+    r.imageExtent = {w, h, 1};
+    auto layout = img->layout;
+    transition(cb, *img, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+    p_vkCmdCopyImageToBuffer(cb, img->image, img->layout, up.buffer, 1, &r);
+    transition(cb, *img, layout);
+    VkMemoryBarrier barrier{VK_STRUCTURE_TYPE_MEMORY_BARRIER};
+    barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    barrier.dstAccessMask = VK_ACCESS_HOST_READ_BIT;
+    p_vkCmdPipelineBarrier(cb, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_HOST_BIT, 0,
+                           1, &barrier, 0, nullptr, 0, nullptr);
+    auto* dst = reinterpret_cast<uint8_t*>(pool->memory + offset);
+    if (row == stride) texture_readbacks.push_back({up.ptr, dst, row * h, nullptr});
+    else for (uint32_t y = 0; y < h; ++y)
+        texture_readbacks.push_back({up.ptr + y * row, dst + y * stride, row, nullptr});
+    static unsigned reported = 0;
+    if (reported++ < 4) log("nvn: texture readback %ux%u, format %#x, row stride %llu",
+                            w, h, tx->format, (unsigned long long)stride);
+    return true;
+}
+
 void replay_buffer_copy(VkCommandBuffer cb, const Cmd& c, const CmdList& list) {
     if (c.blob >= list.blobs.size() || list.blob_size(c.blob) != sizeof(BufferCopyInfo)) return;
     BufferCopyInfo info;
@@ -276,6 +354,7 @@ void replay_clear_texture(VkCommandBuffer cb, const Cmd& c, const CmdList& list)
 }
 
 NX_HLE("nvnCommandBufferCopyTextureToTexture", CopyTextureToTexture);
+NX_HLE("nvnCommandBufferCopyTextureToBuffer", CopyTextureToBuffer);
 NX_HLE("nvnCommandBufferCopyBufferToTexture", CopyBufferToTexture);
 NX_HLE("nvnCommandBufferClearTexture", ClearTexture);
 

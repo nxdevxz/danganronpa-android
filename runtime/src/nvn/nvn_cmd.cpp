@@ -75,6 +75,7 @@ void recycle_cmdlist(std::shared_ptr<CmdList> l) {
 }
 
 struct CommandBuffer : Object {
+    uint64_t copy_row_stride = 0;
     std::mutex lock;
     std::shared_ptr<CmdList> recording = alloc_cmdlist();
     // The memory the game hands over (AddCommandMemory / AddControlMemory) and what recording "uses" of it. Engines
@@ -187,6 +188,13 @@ void note_drop(uint64_t h, const HandleEntry& e, uint64_t by, uint64_t by_start,
 void CommandBufferInitialize(CPU& c) {  // NVNboolean (NVNcommandBuffer*, NVNdevice*)
     make<CommandBuffer>(c.x[0]);
     c.x[0] = 1;
+}
+
+void SetCopyRowStride(CPU& c) {
+    if (auto* cb = get<CommandBuffer>(c.x[0])) {
+        std::lock_guard lk(cb->lock);
+        cb->copy_row_stride = c.x[1];
+    }
 }
 
 void CommandBufferFinalize(CPU& c) { destroy(c.x[0]); }
@@ -445,6 +453,7 @@ void record(uint64_t guest, Cmd cmd, const void* blob, size_t size) {
         return;
     }
     std::lock_guard lk(cb->lock);
+    if (cmd.op == Cmd::CopyTextureToBuffer) cmd.a[2] = cb->copy_row_stride;
     if (blob) {
         cmd.blob = cb->recording->append_blob(blob, size);
     }
@@ -574,6 +583,7 @@ std::string explain_handle(uint64_t handle) {
     return b;
 }
 
+NX_HLE("nvnCommandBufferSetCopyRowStride", SetCopyRowStride);
 NX_HLE("nvnCommandBufferInitialize", CommandBufferInitialize);
 NX_HLE("nvnCommandBufferFinalize", CommandBufferFinalize);
 NX_HLE("nvnCommandBufferBeginRecording", CommandBufferBeginRecording);

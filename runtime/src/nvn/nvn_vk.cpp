@@ -712,11 +712,17 @@ void gpu_submit(const std::vector<std::shared_ptr<CmdList>>& lists, std::shared_
         g_timing.upload_bytes += async ? frame_upload_used() : g_upload_used;
     }
     gpu_profile_mark(g_cb, "end");
-    if (async)  // the profile, zero-draw queries and snapshots read this submit's results right below: waited for
+    auto readbacks = take_texture_readbacks();
+    const bool readback_pending = !readbacks.empty();
+    if (async) {
+        auto late = draw_take_late_write_backs();
+        late.insert(late.end(), readbacks.begin(), readbacks.end());
         frame_submit(VK_NULL_HANDLE, VK_NULL_HANDLE, draw_take_write_backs(),
-                     gpu_profile_on() || zero_draws_on() || debug_snapshots_pending(), draw_take_late_write_backs());
-    else
+                     gpu_profile_on() || zero_draws_on() || debug_snapshots_pending() || readback_pending, std::move(late));
+    } else {
         end_and_wait(VK_NULL_HANDLE, VK_NULL_HANDLE);
+        for (const WriteBack& w : readbacks) apply_write_back(w);
+    }
     draw_end_submit();  // not waited for: snapshots only (the write-backs went with the submit)
     gpu_profile_collect(), zero_draws_collect();
     debug_dump_requested(draw_take_dump_request());  // reads back in a submit of its own, which it waits for

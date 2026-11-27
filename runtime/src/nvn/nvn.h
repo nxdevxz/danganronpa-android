@@ -329,6 +329,7 @@ struct Cmd {
         BindDeferred,  // mask: 0 textures, 1 images, 2 uniform buffers, 3 storage buffers; a[0] the guest array
         BindMultisampleState,  // n: alpha to coverage enabled (nvn_state.cpp)
         CopyBufferToTexture, ClearTexture,  // nvn_copy.cpp (P5R's texture loads and clears)
+        CopyTextureToBuffer,
         ResetCounter, RenderConditional,  // P5R's occlusion culling (nvn_occlusion.cpp)
         SetPrimitiveRestart,  // n: enabled, a[0]: the restart index (nvn_state.cpp)
     } op;

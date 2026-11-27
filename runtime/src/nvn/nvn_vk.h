@@ -293,6 +293,8 @@ std::shared_ptr<CmdList> submit_command_list(uint64_t handle);  // command_list(
 void submit_lists_reset();  // at each submit's start (draw_begin_submit)
 
 void replay_copy(VkCommandBuffer cb, const Cmd& c, const CmdList& list);  // nvn_copy.cpp: texture copies
+bool replay_texture_readback(VkCommandBuffer cb, const Cmd& c);
+std::vector<WriteBack> take_texture_readbacks();
 void replay_buffer_copy(VkCommandBuffer cb, const Cmd& c, const CmdList& list);    // buffer -> texture
 void replay_clear_texture(VkCommandBuffer cb, const Cmd& c, const CmdList& list);  // nvnCommandBufferClearTexture
 void forget_image_views(const GpuImage& img);
