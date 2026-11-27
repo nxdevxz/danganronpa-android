@@ -14,6 +14,7 @@
 #include <nx/runtime.h>
 
 #include "kernel.h"
+#include "module_memory.h"
 #include "platform.h"
 
 #if NX_NCE
@@ -546,26 +547,8 @@ void load_modules(
             }
         }
 
-        vm_set(
-            mi->base + mi->text,
-            mi->text_size,
-            kMemCode,
-            5
-        );
-
-        vm_set(
-            mi->base + mi->ro,
-            mi->ro_size,
-            kMemCode,
-            1
-        );
-
-        vm_set(
-            mi->base + mi->data,
-            size - mi->data,
-            kMemCodeData,
-            3
-        );
+        if (!map_module_memory(*mi, size))
+            fatal("invalid page layout for module %s", mi->name);
 
         LoadedModule lm{
             mi,
