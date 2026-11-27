@@ -802,7 +802,7 @@ void gpu_present(uint64_t texture, const int32_t* crop, uint64_t origin_ns) {
     GpuImage* src = image_of(texture);
     static uint64_t presents = 0;
     ++presents;
-    const bool probe = perf_stats_on() && (presents == 60 || presents == 180);
+    const bool probe = perf_stats_on() && (presents == 60 || presents == 180 || (presents % 60 == 0 && presents <= 1800));  // every 2 s: the yellow menu comes after the video
     auto output = composite.image.lock();
     if (probe)
         log("nvn display selection: window %llx rendered %d uploaded %d texels %d composite %llx live %d type %d",

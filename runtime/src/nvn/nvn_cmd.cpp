@@ -367,8 +367,9 @@ void SetRenderTargets(CPU& c) {
     cmd.a[8] = c.x[4];  // depth/stencil
     // Unity records its screen draws against a proxy that has no NVN texture
     // object. Capture the acquired image now, before replay moves to another frame.
-    if (std::strcmp(game::kInfo.id, "danganronpa") == 0 && n == 1 && cmd.a[0] && cmd.a[8] &&
-        !get<Texture>(cmd.a[0])) {
+    // 2D passes (menus, loading, UI) have no depth buffer: they use the same proxy, learned from a pass that had one.
+    if (std::strcmp(game::kInfo.id, "danganronpa") == 0 && n == 1 && cmd.a[0] &&
+        (cmd.a[8] || cmd.a[0] == screen_color_proxy.load()) && !get<Texture>(cmd.a[0])) {
         const uint64_t acquired = acquired_color_texture.load();
         if (acquired && get<Texture>(acquired)) {
             static std::atomic<bool> reported{false};

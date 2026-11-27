@@ -682,8 +682,10 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     }
     // Textures first: an upload or a layout change cannot happen inside the render pass.
     uint32_t gathered = gather_textures(*shaders);
-    if (perf_stats_on() && g_frame.load() == 59) {
+    if (perf_stats_on() && (g_frame.load() % 60 == 59 && g_frame.load() <= 1799)) {
         static unsigned traced = 0;
+        static uint64_t traced_frame = ~0ull;
+        if (traced_frame != g_frame.load()) traced_frame = g_frame.load(), traced = 0;
         if (traced < 32) {
             ++traced;
             log("nvn display draw %u: target %llx vertex %s fragment %s textures %zu", traced,
