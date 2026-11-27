@@ -1061,6 +1061,12 @@ void apply_texel_writes(VkCommandBuffer cb, Texture& t, GpuImage& img) {
     bool is3d = img.view_type == VK_IMAGE_VIEW_TYPE_3D;
     for (const auto& w : writes) {
         if (w.level >= img.levels) continue;
+        // The staged bytes are still in the guest's format (BC/ASTC blocks, R8, R11G11B10...); the image may be a host
+        // format (decoded RGBA on Mali), so convert like CopyBufferToTexture does. Raw copy only if that is unknown.
+        {
+            const int32_t region[6] = {int32_t(w.x), int32_t(w.y), int32_t(w.z), int32_t(w.w), int32_t(w.h), int32_t(w.d)};
+            if (upload_region(cb, t, img, w.level, 0, region, w.data.data())) continue;
+        }
         Upload u = upload(w.data.data(), w.data.size(), 16);
         VkBufferImageCopy r{};
         r.bufferOffset = u.offset;
