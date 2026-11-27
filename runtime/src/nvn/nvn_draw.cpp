@@ -64,6 +64,10 @@ bool narrow_pass_barrier() {
 void vertex_read_barrier(VkCommandBuffer cb, const ShaderInfo* vs);  // the open pass is a render pass object (nvn_renderpass.cpp), not dynamic rendering
 Targets g_pass;           // what the open pass renders to
 DisplayComposite g_last_composite;
+struct MenuDrawHistory {
+    uint64_t sprite_target = 0;
+    uint64_t blit_target = 0;
+} g_menu_draw;
 GpuImage* g_pass_images[9];  // their images (8: depth), resolved once per pass for gather_textures
 uint32_t g_pass_written = 0;  // targets the open pass's draws wrote: bit c colour c, bit 8 depth
 uint64_t g_pass_draws = 0;    // draws in the open pass (NX_EXP_RP split)
@@ -616,12 +620,16 @@ bool danganronpa_motion_blur_skipped(const Targets& t, bool indexed, const Cmd& 
     return true;
 }
 
+bool unity_blit_shader(const ShaderInfo& vertex, const ShaderInfo* fragment) {
+    return fragment && vertex.hash == "682752fe4552b2a4" && fragment->hash == "724b91d788fb0f23";
+}
+
 // Remember the latest Unity blit until the queued present consumes it. Unity can
 // draw through a guest target for which replay has no color attachment. In that
 // case its single sampled input still names the previous pass's rendered image.
 void remember_unity_blit(const Targets& targets, const ShaderInfo& vertex, const ShaderInfo* fragment) {
     static const bool enabled = std::strcmp(game::kInfo.id, "danganronpa") == 0;
-    if (!enabled || !fragment || vertex.hash != "682752fe4552b2a4" || fragment->hash != "724b91d788fb0f23")
+    if (!enabled || !unity_blit_shader(vertex, fragment))
         return;
     g_last_composite = {};
     if (targets.color_count && !targets.views.level[0] && !targets.views.layer[0]) {
@@ -639,7 +647,39 @@ void remember_unity_blit(const Targets& targets, const ShaderInfo& vertex, const
         g_last_composite = {binding.texture, input->image};
 }
 
+// In the Mali menu capture a sprite is drawn to the 720p scene, then Unity blits
+// it to the window. The immediately following 18-index batch turns the visible
+// area solid #fff300. Restrict the workaround to that target chain and material.
+bool menu_overlay(const MenuDrawHistory& previous, const Targets& t, uint32_t mode,
+                  bool indexed, const Cmd& c, const ShaderInfo& vs, const ShaderInfo* fs,
+                  MenuDrawHistory& next) {
+    static const bool enabled = std::strcmp(game::kInfo.id, "danganronpa") == 0 && is_mali();
+    if (!enabled || !fs || t.color_count != 1 || !t.colors[0] || t.views.level[0] ||
+        t.views.layer[0] || c.i[3] > 1 || g_textures.resolved.size() != 1)
+        return false;
+    const uint64_t input = g_textures.resolved.front().texture;
+    if (indexed && mode == 4 && c.i[0] == 6 && vs.hash == "ef449c3a87282a24" &&
+        fs->hash == "02b7f380c02bc6e4") {
+        next.sprite_target = t.colors[0];
+    } else if (!indexed && mode == 7 && c.i[1] == 4 && previous.sprite_target &&
+               input == previous.sprite_target && input != t.colors[0] && unity_blit_shader(vs, fs)) {
+        const Texture* scene = get<Texture>(input);
+        if (scene && scene->width == 1280 && scene->height == 720 && scene->format == 0x25)
+            next.blit_target = t.colors[0];
+    } else if (previous.blit_target == t.colors[0] && indexed && mode == 4 && c.i[0] == 18 &&
+               vs.hash == "9072bc408fb434ac" && fs->hash == "9f1eca537afc1231" &&
+               g_state.color.blend_enable[0] && !g_state.depth.depth_write) {
+        const BlendTarget& b = g_state.blend[0];
+        const Texture* tile = get<Texture>(input);
+        return tile && tile->width == 4 && tile->height == 4 && tile->format == 0x25 &&
+               b.src_rgb == 2 && b.dst_rgb == 6 && b.src_a == 2 && b.dst_a == 6 &&
+               b.eq_rgb == 1 && b.eq_a == 1;
+    }
+    return false;
+}
+
 bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, const Cmd& c) {
+    const auto previous_menu_draw = std::exchange(g_menu_draw, {});
     g_stats.total++;
     if (g_state.rasterizer_discard || !g_state.render_enable) return false;  // nothing reaches the targets
     if (shadow_draw_skipped(t)) return false;
@@ -682,6 +722,12 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
     }
     // Textures first: an upload or a layout change cannot happen inside the render pass.
     uint32_t gathered = gather_textures(*shaders);
+    MenuDrawHistory next_menu_draw;
+    if (menu_overlay(previous_menu_draw, t, mode, indexed, c, *vs, fs, next_menu_draw)) {
+        static const bool logged = [] { log("danganronpa: preserved menu before yellow overlay"); return true; }();
+        (void)logged;
+        return false;
+    }
     if (perf_stats_on() && (g_frame.load() % 60 == 59 && g_frame.load() <= 1799)) {
         static unsigned traced = 0;
         static uint64_t traced_frame = ~0ull;
@@ -998,6 +1044,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
         if (q) zero_draws_end(cb);
     }
     g_stats.done++;
+    g_menu_draw = next_menu_draw;
     remember_unity_blit(t, *vs, fs);
     if (g_pass_draws++ == 0 && (exp_render_pass() & 4)) pass_end_only(cb, 9);  // NX_EXP_RP split: one more store and load
     if (gpu_profile_on())
@@ -1039,6 +1086,7 @@ bool draw(VkCommandBuffer cb, const Targets& t, uint32_t mode, bool indexed, con
 }  // namespace
 
 DisplayComposite take_display_composite() {
+    g_menu_draw = {};
     return std::exchange(g_last_composite, {});
 }
 
