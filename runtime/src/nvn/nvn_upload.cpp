@@ -1,5 +1,6 @@
 // Texture uploads (nvn_pipeline.h): guest pool memory into the host image, untiled, widened where the host stores a
 // format wider than NVN does, and checked against what the copies read (docs/nvn/DEBUG.md #50).
+#include <map>
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -354,6 +355,18 @@ bool upload_region(VkCommandBuffer cb, const Texture& t, GpuImage& img, uint32_t
             log("nvn/vk: buffer-to-texture copy into format %#x (%u bytes per block, host %u): not replayed", t.format,
                 bytes, host_bytes);
         return false;
+    }
+    {   // diagnostic: first uploads per NVN format (are the converted bytes empty? which host format?)
+        static std::map<uint32_t, int> seen;
+        if (seen[t.format]++ < 3) {
+            uint64_t nonzero = 0, sum = 0;
+            const uint8_t* q = static_cast<const uint8_t*>(u.ptr);
+            const uint64_t n = std::min<uint64_t>(blocks * (texel_w == 1 ? 4 : bytes), 1u << 16);
+            for (uint64_t k = 0; k < n; k++) nonzero += q[k] != 0, sum += q[k];
+            log("nvn/diag: region upload fmt %#x -> vk %d (alpha_from_r %d) %ux%u level %u at %u,%u: %llu of %llu staged bytes nonzero",
+                t.format, int(img.format), int(img.alpha_from_r), w, h, level, x, y, (unsigned long long)nonzero,
+                (unsigned long long)n);
+        }
     }
     VkBufferImageCopy r{};
     r.bufferOffset = u.offset;

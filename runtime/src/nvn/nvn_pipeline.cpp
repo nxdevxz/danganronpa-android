@@ -1253,6 +1253,13 @@ VkImageView sampled_view(VkCommandBuffer cb, uint64_t texture, const ImageShape&
             if ((s >> (8 * k) & 0xFF) == 5) s = (s & ~(0xFFu << (8 * k))) | (1u << (8 * k));
         vi.swizzle = s;
     }
+    {   // diagnostic: how single-channel (font/mask) textures are sampled
+        static int diag = 0;
+        if (img->nvn_format == 0x1 && diag++ < 24)
+            log("nvn/diag: sampled R8 texture %llx img %ux%u alpha_from_r %d vk %d swizzle %08x (view swz %08x, pool %08x)",
+                (unsigned long long)texture, img->width, img->height, int(img->alpha_from_r), int(img->format), vi.swizzle,
+                view ? view->swizzle : 0u, get<Texture>(texture) ? get<Texture>(texture)->pool_swizzle.load() : 0u);
+    }
     VkImageView v = view_of(*img, view_type(shape), vi);
     if (!v) {
         *layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
