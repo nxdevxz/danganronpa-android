@@ -45,6 +45,9 @@ uint64_t original_decoder_ctor;
 // before the client's FillBufferDone sees it.
 constexpr uint32_t kIndexPortDefinition = 0x02000001, kIndexPortFormat = 0x06000001;
 constexpr uint32_t kColorI420 = 19;
+// The game holds every output buffer it was given until it has enough pictures queued; the software decoder
+// offers only 2, the hardware one many more. More are announced so the picture queue can fill.
+constexpr uint32_t kOutputBuffers = 8;
 
 struct SoftComponent {
     uint64_t handle = 0;
@@ -155,6 +158,8 @@ void soft_get_parameter(CPU& c) {
                 k->width = field<int32_t>(params, 56), k->height = field<int32_t>(params, 60);
                 k->stride = field<int32_t>(params, 64), k->slice = field<int32_t>(params, 68);
                 if (k->want_color) field<uint32_t>(params, 88) = k->want_color;
+                if (field<uint32_t>(params, 16) < kOutputBuffers) field<uint32_t>(params, 16) = kOutputBuffers;
+                if (field<uint32_t>(params, 20) < kOutputBuffers) field<uint32_t>(params, 20) = kOutputBuffers;
                 static std::atomic<unsigned> said{0};
                 if (said.fetch_add(1) < 12)
                     log("movie: OMX output port %dx%d stride %d slice %d buffer %u", k->width, k->height, k->stride,
