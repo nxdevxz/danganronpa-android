@@ -464,6 +464,17 @@ std::vector<Snap> g_snaps;
 
 }  // namespace
 
+// A bounded, low-resolution readback correlated with the draw trace. Keep the
+// opening samples, and optionally inspect 96 consecutive menu draws as well.
+static bool auto_sample_draw(uint64_t draw) {
+    static const uint64_t from = [] {
+        const char* e = std::getenv("NX_SAMPLE_DRAW_FROM");
+        return e ? std::strtoull(e, nullptr, 10) : 0ull;
+    }();
+    return perf_stats_on() && ((draw >= 1 && draw <= 10) ||
+        (from && draw >= from && draw - from < 96));
+}
+
 bool debug_snap_wanted(uint64_t draw) {
     static const std::vector<uint64_t> list = [] {
         std::vector<uint64_t> v;
@@ -477,7 +488,7 @@ bool debug_snap_wanted(uint64_t draw) {
         }
         return v;
     }();
-    return (perf_stats_on() && draw >= 1 && draw <= 10) || std::find(list.begin(), list.end(), draw) != list.end();
+    return auto_sample_draw(draw) || std::find(list.begin(), list.end(), draw) != list.end();
 }
 
 uint32_t g_snap_layer = 0, g_snap_level = 0;  // which layer and level the next debug_snapshot reads (nvn_draw.cpp)
@@ -499,7 +510,7 @@ void debug_snapshot(VkCommandBuffer cb, GpuImage& img, uint64_t draw) {
         snap.h = std::max(1u, std::min(uint32_t(crop[3] * img.height), img.height - uint32_t(y0)));
     }
     // A small grid from each startup draw locates where the opening loses color.
-    const bool sample = perf_stats_on() && draw >= 1 && draw <= 10 && !std::getenv("NX_SNAP_DRAWS");
+    const bool sample = auto_sample_draw(draw) && !std::getenv("NX_SNAP_DRAWS");
     const uint32_t source_width = snap.w, source_height = snap.h;
     if (sample) {
         snap.w = std::min(64u, snap.w);
@@ -578,17 +589,22 @@ void debug_snapshots_write() {  // after the submit's fence
                 std::fclose(f);
             }
             p_vkUnmapMemory(vk_device(), snap.s.buffer_memory);
-        } else if (perf_stats_on() && snap.draw >= 1 && snap.draw <= 10 && !std::getenv("NX_SNAP_DRAWS")) {
+        } else if (auto_sample_draw(snap.draw) && !std::getenv("NX_SNAP_DRAWS")) {
             if (p_vkMapMemory(vk_device(), snap.s.buffer_memory, 0, VK_WHOLE_SIZE, 0, &p) == VK_SUCCESS) {
                 const auto* rgba = static_cast<const uint8_t*>(p);
-                unsigned lit = 0, peak = 0;
+                unsigned lit = 0, peak = 0, yellow = 0, different = 0;
                 for (unsigned i = 0; i < snap.w * snap.h; ++i) {
                     unsigned value = std::max({rgba[4*i], rgba[4*i+1], rgba[4*i+2]});
                     lit += value > 0;
                     peak = std::max(peak, value);
+                    yellow += rgba[4*i] >= 240 && rgba[4*i+1] >= 240 && rgba[4*i+2] <= 32;
+                    different += std::memcmp(rgba + 4*i, rgba, 3) != 0;
                 }
                 log("startup draw %llu: %u/%u nonblack samples, peak %u",
                     (unsigned long long)snap.draw, lit, snap.w * snap.h, peak);
+                log("color draw %llu: first RGB %02x%02x%02x, %u/%u yellow, %u differ from first",
+                    (unsigned long long)snap.draw, unsigned(rgba[0]), unsigned(rgba[1]), unsigned(rgba[2]),
+                    yellow, snap.w * snap.h, different);
                 p_vkUnmapMemory(vk_device(), snap.s.buffer_memory);
             }
         } else if (!snap.raw_format) {

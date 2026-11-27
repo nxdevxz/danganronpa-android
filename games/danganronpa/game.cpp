@@ -845,10 +845,14 @@ void game::after_init() {
     log("movie: decoder trace %s", original_decoder_ctor ? "enabled" : "unavailable");
     // The US release ships English and Japanese text.
     default_setting("NX_GAME_LANGUAGES", "en-us ja");
-    // Capture a bounded startup draw trace when the player enables diagnostics.
+    // Capture the menu after the opening, where the remaining color fault occurs.
     if (const char* trace = std::getenv("NX_TRACE_PERF"); trace && trace[0] == '1') {
-        default_setting("NX_TRACE_DRAWS", "0");
-        default_setting("NX_TRACE_COUNT", "24");
+        default_setting("NX_TRACE_DRAWS", "10000");
+        default_setting("NX_TRACE_COUNT", "96");
+        default_setting("NX_SAMPLE_DRAW_FROM", "10000");
+        default_setting("NX_TRACE_SAMPLERS", "1");
+        default_setting("NX_TRACE_VERTS", "1");
+        default_setting("NX_TRACE_VS_BLOCKS", "1");
         // Correlate the loading scene's asset requests with shader pairs that
         // actually cover pixels while the window is black.
         default_setting("NX_TRACE_FS", "1");
