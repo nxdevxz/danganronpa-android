@@ -9,6 +9,7 @@
 
 #include <cstdlib>
 #include <fstream>
+#include <iomanip>
 #include <sstream>
 #include <cstring>
 #include <memory>
@@ -115,7 +116,8 @@ uint64_t active_program_id() {
             std::ifstream manifest(game_files_root() + "/installed.tsv");
             std::string format, title;
             std::ostringstream expected;
-            expected << "title\t" << std::hex << game::kInfo.alternate_program_id;
+            // installed.tsv stores all 16 hex digits, including the leading zero.
+            expected << "title\t" << std::hex << std::setfill('0') << std::setw(16) << game::kInfo.alternate_program_id;
             if (std::getline(manifest, format) && std::getline(manifest, title) && title == expected.str())
                 return game::kInfo.alternate_program_id;
         }
